@@ -61,6 +61,9 @@ kinen-daemon
 2. Is reducing from two processes to one worth the complexity?
 3. Should the daemon be a shared infrastructure layer?
 
+
+>> no specific integration for now beyond simple methodology tied with prompts for agents
+
 ---
 
 ### Q2.2: Daemon Lifecycle
@@ -102,6 +105,8 @@ kinen search "auth"   # Starts daemon
 2. Should there be a "server mode" for continuous operation?
 3. How important is the daemon being invisible to users?
 
+>> Daemon should be transparent. cli should interact with daemon and I think auto start it. Daemon in charge of maintaining access to artifacts and rounds, wath for file changes, manage background indexing, and start memory consolidation rounds.
+
 ---
 
 ### Q2.3: Index Update Strategy
@@ -131,6 +136,9 @@ kinen search "auth"   # Starts daemon
 1. How aggressive should indexing be? (real-time vs batched)
 2. Should there be a "pause indexing" command for intensive work?
 3. What's an acceptable delay between file change and searchability?
+
+>> Batched, no reason to do everything in real time. Don't consume too many resources...
+>> Delay of several seconds is perfectly acceptable. The real important aspect of indexing is for semantic search across sessions. 
 
 ---
 
@@ -163,6 +171,11 @@ Rounds → Extract decisions → Cluster similar → Generate insights
 3. Should users be able to edit/delete memory entries?
 4. How do you handle conflicting decisions across sessions?
 
+>> Consolidation should happen on session close for a given session and on a schedule across sessions. Would be interesting for kinen to also look into bd tasks history to help the user know what to work on next, come up with recommendations and make sure importatnt things are not forgottern... and ask user to help with prioritixzation of backlog if it grows too much mayne ?
+>> AI synthesize vs just extract: I don't know yet we will need to experiment, but indeed AI should be thre to help. Also see this session for reference on more autonomous orchstration: /Users/sbellity/Library/Mobile Documents/iCloud~md~obsidian/Documents/kinen/spaces/p/sessions/20251115-01-orchestrator-intelligence
+>> 3 yes I guess so. those are just files in the filesystem after all 
+>> Surface conflicting decisions and help user understand those paradoxes maybe?
+
 ---
 
 ### Q2.5: VSCode Extension Architecture
@@ -191,6 +204,11 @@ Rounds → Extract decisions → Cluster similar → Generate insights
 - Semantic search across both
 
 **Proposed UI structure** (Option A or C):
+
+
+>> Let's focus on kinen pure extension, I see that there are already extensions for beads, let's keep them separate (I am not the developer of beads, just trying it now)
+>> beads is more for agents to keep track of their work, kinen sessions should surface tactical decisions to user by looking at beads (via beads mco or cli I guess ?) and surface those as insights in kinen sessions ? 
+
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -221,6 +239,11 @@ Rounds → Extract decisions → Cluster similar → Generate insights
 2. How prominent should beads integration be?
 3. Should semantic search be in sidebar or command palette?
 4. What's the most important action to optimize for?
+
+>> 1. work from existing
+>> 2. beads no direct integration in kinen extension
+>> 3. not sure, let's first implement search in kinen actual
+>> 4. round editor, start next round, start new session
 
 ---
 
@@ -290,6 +313,11 @@ consolidation:
 3. How much should be pre-filled vs left as templates?
 4. Should there be different templates for different project types?
 
+>> 1. yes
+>> 2. no
+>> 3. explore options
+>> 4. yes but let's start with technical projects first... software archicture and dev. but think about how to structure prompts to expand to other domains natirally (creative writing, lawyers, teachers etc...)
+
 ---
 
 ### Q2.7: kinen ↔ beads Integration Points
@@ -333,6 +361,11 @@ bd show kinen-abc
 3. Should "complex issue" detection suggest starting a kinen session?
 4. How do you envision using both tools in a typical workday?
 
+>> 1. leave it to LLM to decide based on either use feedback or internal orchstration needs. the idea is to have a portable task management system that is not tied to a specific editor or coding agent internal thing...
+>> 2. that that would be good to provide context indeed
+>> 3. yes good idea
+>> 4. kinen for architecture and specification work, then implementaion plan writtn in beads by the kinen assistant, then coding assistant to take over devlopment and track imokementaiton with subagents possibly using beads as project management
+
 ---
 
 ### Q2.8: Search UX
@@ -372,11 +405,18 @@ kinen_search({
 - Type query, see results with previews
 - Click to open source document
 
+
 **Questions**:
 1. What search UX do you prefer? (CLI, VSCode, both?)
 2. Should search results show relevance scores by default?
 3. How many context chunks (before/after) by default?
 4. Should there be a "search history" feature?
+
+>> Cmd+Shift+K is alrady mapped to something else in cursor
+>> 1. both + mcp for agents
+>> 2. yes
+>> 3. configurable, with a default (maybe 2, let's try to adjust based on real usage)
+>> 4. no
 
 ---
 

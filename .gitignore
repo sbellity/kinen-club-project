@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Lock files (use bun.lock)
+package-lock.json
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Test sessions
+agents/
+kinen/
+vscode-extension/
+club/
+space/
+scratch/
+

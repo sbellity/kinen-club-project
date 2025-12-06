@@ -185,6 +185,8 @@ project/
 3. Where should combined workflow documentation live?
 4. Should sessions/ be at project root or inside .kinen/?
 
+
+>> Let's not necessarily focus n this now
 ---
 
 ### Q1.7: Collaboration & Git
@@ -237,6 +239,8 @@ k status                          # show both
 1. How important is the "one system" feel vs. keeping them independent?
 2. Would a combined CLI help or add confusion?
 3. What's the minimum integration needed to feel cohesive?
+
+>> I don't know yet, I would like to do a few sessions and them all together while we develop actual features for kinen. We are going to focus today in parallel into, the indexing subsystem for kinen as well as the user experience in vscode.... doing this in kinen sessions and using bd for tracking implem in parallel sessions coordinated with bd
 
 ---
 

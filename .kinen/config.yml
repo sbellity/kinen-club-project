@@ -1,0 +1,24 @@
+# Kinen Session Configuration
+
+# LLM Provider Settings
+llm:
+  default_provider: anthropic
+  models:
+    gemini: gemini-3.0-pro
+    anthropic: claude-4.5-sonnet
+
+# Session Settings
+session:
+  auto_branch: true
+  branch_pattern: "session/issue-{issue_number}"
+  commit_author: "Kinen Bot"
+  commit_email: "bot@kinen.club"
+
+# Aider Settings
+aider:
+  read_files: []
+  flags:
+    - --yes
+    - --no-auto-commits
+
+
