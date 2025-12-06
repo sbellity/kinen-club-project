@@ -37,18 +37,21 @@ summary: "Track breakdown for kinen implementation - extending mature kinen-go c
 
 | Track | Scope | LOE | Why Needed |
 |-------|-------|-----|------------|
-| **1A** | HTTP API wrapper | 1-2 days | Expose existing service over HTTP |
+| **1A** | HTTP→JSON-RPC adapter | 2-3 hours | HTTP transport for VSCode extension |
 | **1B** | Kinen markdown parser | 2-3 days | Parse sessions/rounds, extract wiki-links |
 | **1C** | LanceDB adapter | 2-3 days | OPTIONAL - SQLite might be sufficient |
 | **1D** | File watcher | 1-2 days | Delta indexing on changes |
 | **1E** | Decision consolidation | 1-2 days | Extract decisions → memory files |
 | **1F** | PDF/Resource parser | 1-2 days | Index resources folder |
-| **2** | TS CLI daemon client | 2-3 days | Connect CLI to Go daemon |
+| **2** | Port sessions/spaces to Go | 1-2 days | Single binary CLI (replaces TS CLI) |
 | **3** | VSCode extension | 3-4 days | Test infra + search integration |
 | **4** | Obsidian compatibility | 2-3 days | Wiki-links, frontmatter standardization |
 | **5** | Distribution | 2-3 days | Homebrew, launchd |
 
-**Total: ~7 days** (with parallelization)
+**Total: ~6 days** (with parallelization)
+
+> [!note] Architecture Decision
+> **Go-only CLI.** The TypeScript CLI (`kinen/`) is deprecated. All CLI functionality lives in Go for single-binary distribution. VSCode extension talks to daemon via HTTP.
 
 ---
 
@@ -104,36 +107,65 @@ EXISTING KINEN-GO (9 tracks complete)
 
 ---
 
-## Track 1A: HTTP API Wrapper
+## Track 1A: Proto-First API (Connect + MCP Generated)
 
-**Summary**: Thin HTTP layer wrapping existing `pkg/service.MemoryService`
+**Summary**: Define kinen API once in Protocol Buffers, generate BOTH Connect handlers (HTTP/gRPC) AND MCP server from the same schema.
 
-**Existing (DO NOT REBUILD)**:
-- `pkg/service/` - MemoryService with Search, AddMemory, LoadData, etc.
-- `pkg/api/` - Public Client interface
-- `cmd/kinen/mcp/` - Reference implementation (JSON-RPC)
+**The Insight**: Using [protoc-gen-go-mcp](https://github.com/redpanda-data/protoc-gen-go-mcp), we can generate MCP servers directly from proto definitions. Combined with Connect RPC, ONE schema produces:
+- HTTP/JSON API (for VSCode, curl)
+- gRPC API (for Go clients)
+- MCP server (for Claude, Cursor agents)
+
+**This replaces** the hand-written `cmd/kinen/mcp/` with generated code.
+
+**Existing (TO BE REPLACED)**:
+- `cmd/kinen/mcp/server.go` - Hand-written JSON-RPC → **DELETE**
+- `cmd/kinen/mcp/handlers.go` - Hand-written handlers → **DELETE**
 
 **Build**:
+```
+api/kinen/kinen.proto (single source of truth)
+        │
+        ├── buf generate
+        │
+        ▼
+├── api/kinen/kinen.pb.go           # Protobuf types
+├── api/kinen/kinenconnect/         # Connect handlers (HTTP/gRPC)
+└── api/kinen/kinenmcp/             # MCP handlers (generated!)
+```
+
 ```go
-// cmd/kinen-daemon/main.go (~300-500 lines total)
-svc := service.NewMemoryService(client)
-r := chi.NewRouter()
-r.Post("/api/v1/search", handlers.Search(svc))
-r.Post("/api/v1/memory/add", handlers.AddMemory(svc))
-// ...
+// cmd/kinen/main.go - MCP mode
+mcpServer := mcp.NewServer(...)
+kinenmcp.RegisterKinenService(mcpServer, kinenServer)
+mcpServer.ServeStdio()
+
+// cmd/kinen-daemon/main.go - HTTP mode
+mux := http.NewServeMux()
+path, handler := kinenconnect.NewKinenServiceHandler(kinenServer)
+mux.Handle(path, handler)
 ```
 
 **Tasks**:
 | ID | Task | LOE |
 |----|------|-----|
-| 1A.1 | Chi router + main.go | 1h |
-| 1A.2 | Health endpoint | 30m |
-| 1A.3 | Search + AddMemory handlers | 1h |
-| 1A.4 | Stats + List + Get handlers | 1h |
-| 1A.5 | Export + LoadData handlers | 30m |
-| 1A.6 | Daemon lifecycle (signals) | 30m |
+| 1A.1 | Define api/kinen/kinen.proto | 1h |
+| 1A.2 | Set up protoc-gen-go-mcp in buf.gen.yaml | 30m |
+| 1A.3 | Generate Connect + MCP code | 15m |
+| 1A.4 | Implement KinenServer (wraps service) | 1.5h |
+| 1A.5 | Wire Connect into daemon | 30m |
+| 1A.6 | Wire MCP into CLI (replace hand-written) | 30m |
 
-**Handover**: See `artifacts/handover-track-1a.md`
+**Total: ~4.5 hours**
+
+**Benefits**:
+- **One schema** → HTTP + gRPC + MCP
+- **Delete hand-written MCP code** (~300 lines)
+- Type-safe everywhere
+- Schema IS documentation
+- Future-proof for new transports
+
+**Handover**: See `artifacts/implementation/handover-track-1a.md`
 
 ---
 
@@ -261,34 +293,44 @@ func WriteMemoryFile(decision Decision, destPath string) error
 
 ---
 
-## Track 2: TypeScript CLI Daemon Client
+## Track 2: Port Sessions/Spaces to Go CLI
 
-**Summary**: Update kinen TS CLI to talk to Go daemon via HTTP
+**Summary**: Port session and space management from TypeScript to Go. Single binary does everything.
 
-**Existing**: Full CLI at `/Users/sbellity/code/kinen/kinen/src/`
+**Reference**: `/Users/sbellity/code/kinen/kinen/src/` (TS implementation to port)
 
 **Build**:
-```typescript
-// src/lib/daemon-client.ts
-class DaemonClient {
-    async search(query: string): Promise<SearchResult[]>
-    async addMemory(messages: Message[]): Promise<AddMemoryResult>
-}
+```go
+// cmd/kinen/commands/session.go
+func sessionNewCmd() *cobra.Command  // kinen session new "topic"
+func sessionListCmd() *cobra.Command // kinen session list
+func sessionCurrentCmd() *cobra.Command
+
+// cmd/kinen/commands/space.go
+func spaceListCmd() *cobra.Command   // kinen space list
+func spaceSwitchCmd() *cobra.Command // kinen space switch <name>
+
+// internal/kinen/sessions.go
+type Session struct { Name, Path, Type string; Created time.Time }
+func CreateSession(name, sessionType string) (*Session, error)
+func ListSessions(spacePath string) ([]Session, error)
 ```
 
 **Tasks**:
 | ID | Task | LOE |
 |----|------|-----|
-| 2.1 | DaemonClient class | 2h |
-| 2.2 | CLI search command | 2h |
-| 2.3 | CLI backlinks command | 1h |
-| 2.4 | CLI index commands | 1h |
-| 2.5 | MCP tool updates | 2h |
-| 2.6 | Auto-start daemon | 1h |
+| 2.1 | Space management (list, switch, current) | 2h |
+| 2.2 | Session management (new, list, current) | 3h |
+| 2.3 | Round creation (new round in session) | 2h |
+| 2.4 | Search command (wraps existing service) | 1h |
+| 2.5 | Index commands (build, status) | 1h |
+| 2.6 | MCP server (already exists, verify tools) | 1h |
 
-**Depends on**: 1A (HTTP API)
+**Depends on**: 1B (Parser for reading existing sessions)
 
-**Handover**: See `artifacts/handover-track-2.md`
+**TS CLI Deprecation**: After this track, `kinen/` TypeScript package is no longer needed. Keep for reference during porting.
+
+**Handover**: See `artifacts/implementation/handover-track-2.md`
 
 ---
 

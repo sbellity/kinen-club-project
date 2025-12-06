@@ -1,232 +1,501 @@
 ---
 artifact_type: agent_handover
 track: "1A"
-track_name: "HTTP API + Daemon Shell"
+track_name: "Proto-First API (Connect + MCP)"
 date: 2025-12-06
+epic_id: kinen-0ed
 ---
 
-# Agent Handover: Track 1A - HTTP API + Daemon Shell
+# Agent Handover: Track 1A - Proto-First API
+
+> [!warning] MANDATORY: Beads Status Updates
+> **You MUST update beads** — chat is NOT a communication channel!
+> 
+> 1. **Start**: `bd update kinen-0ed --status in_progress --notes "Starting Track 1A"`
+> 2. **Every 30-60 min**: `bd update TASK_ID --notes "Progress: [status]"`
+> 3. **When blocked**: `bd create "BLOCKED [1A]: [issue]" -t task -p 0 --deps discovered-from:kinen-0ed`
+> 4. **Before ending**: Update ALL tasks with current status
+> 
+> **See `collaboration.md` for full protocol.**
 
 ## Your Mission
 
-Add an HTTP API layer to the **existing, mature kinen-go codebase** (9 tracks already complete!). You're wrapping existing functionality, NOT building from scratch.
+Define the kinen API once in Protocol Buffers. Generate BOTH:
+- **Connect handlers** (HTTP/gRPC) for VSCode extension, curl, Go clients
+- **MCP handlers** for Claude Desktop, Cursor, AI agents
+
+One schema, multiple transports. Zero hand-written boilerplate.
+
+## The Elegant Architecture
+
+```
+api/kinen/kinen.proto (SINGLE SOURCE OF TRUTH)
+        │
+        ├── protoc-gen-go          → kinen.pb.go (types)
+        ├── protoc-gen-connect-go  → kinenconnect/ (HTTP/gRPC)
+        └── protoc-gen-go-mcp      → kinenmcp/ (MCP server)
+```
+
+**This REPLACES the hand-written MCP server** at `cmd/kinen/mcp/`.
 
 ## Context
 
-- **Workspace**: `/Users/sbellity/code/p/kinen-go` (MATURE codebase!)
-- **Target**: Create `cmd/kinen-daemon/` with HTTP server
-- **Issue Tracking**: Use `bd` (beads) for all task tracking
+- **Workspace**: `/Users/sbellity/code/p/kinen-go`
+- **Pattern**: `api/mlservice/` (existing Connect services)
+- **New tool**: [protoc-gen-go-mcp](https://github.com/redpanda-data/protoc-gen-go-mcp)
+- **Wrap**: `pkg/service/` (existing business logic)
 
-## ⚠️ CRITICAL: Read These First!
+## Step 1: Install protoc-gen-go-mcp
 
-Before writing ANY code, read:
-1. `/Users/sbellity/code/p/kinen-go/docs/API.md` - Full API reference
-2. `/Users/sbellity/code/p/kinen-go/docs/ARCHITECTURE_GO.md` - Architecture
-3. `/Users/sbellity/code/p/kinen-go/pkg/service/` - Service layer you'll wrap
-4. `/Users/sbellity/code/p/kinen-go/cmd/kinen/mcp/` - Existing MCP server (reference)
-
-## What Already Exists (DO NOT REBUILD!)
-
-```
-kinen-go/
-├── pkg/
-│   ├── api/
-│   │   ├── client.go          # ✅ Public Client interface
-│   │   ├── types.go           # ✅ Public types (MemoryEntry, Filters, etc.)
-│   │   ├── options.go         # ✅ WithLogger, options pattern
-│   │   └── convert.go         # ✅ Internal→Public type conversion
-│   └── service/
-│       ├── service.go         # ✅ MemoryService wrapper
-│       ├── memory.go          # ✅ Search, AddMemory, LoadData, etc.
-│       └── export.go          # ✅ Export functionality
-├── internal/
-│   ├── config/                # ✅ Config system (Viper)
-│   ├── logger/                # ✅ Logging (Zerolog)
-│   ├── storage/sqlite/        # ✅ SQLite+VSS storage
-│   ├── ml/ollama/             # ✅ Ollama embeddings + extraction
-│   ├── memorymanager/         # ✅ Full memory pipeline
-│   └── ...                    # ✅ Many more complete packages
-└── cmd/kinen/mcp/
-    ├── server.go              # ✅ MCP server (JSON-RPC over stdio)
-    └── handlers.go            # ✅ Tool handlers (REFERENCE!)
+```bash
+go install github.com/redpanda-data/protoc-gen-go-mcp/cmd/protoc-gen-go-mcp@latest
 ```
 
-**The memory system is COMPLETE. You are adding HTTP transport only.**
+## Step 2: Define the Proto
 
-## What You'll Build (Small!)
+Create `api/kinen/kinen.proto`:
 
+```protobuf
+syntax = "proto3";
+
+package kinen;
+
+option go_package = "github.com/sbellity/kinen/api/kinen";
+
+// KinenService provides memory management and semantic search
+service KinenService {
+  // Search memories with hybrid search (FTS + semantic)
+  rpc Search(SearchRequest) returns (SearchResponse);
+  
+  // Add a memory from conversation messages
+  rpc AddMemory(AddMemoryRequest) returns (AddMemoryResponse);
+  
+  // Get statistics about the memory store
+  rpc GetStats(StatsRequest) returns (StatsResponse);
+  
+  // List all memories with optional filters
+  rpc ListMemories(ListRequest) returns (ListResponse);
+  
+  // Get a specific memory by ID
+  rpc GetMemory(GetRequest) returns (GetResponse);
+  
+  // Export memories to JSONL
+  rpc Export(ExportRequest) returns (ExportResponse);
+  
+  // Load data from JSONL
+  rpc LoadData(LoadDataRequest) returns (LoadDataResponse);
+  
+  // Health check
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// ============================================================
+// Search
+// ============================================================
+
+message SearchRequest {
+  string query = 1;
+  int32 limit = 2;
+  float min_score = 3;
+  repeated string categories = 4;
+  string since = 5;  // ISO timestamp
+  string until = 6;  // ISO timestamp
+}
+
+message SearchResponse {
+  repeated Memory results = 1;
+}
+
+// ============================================================
+// AddMemory
+// ============================================================
+
+message AddMemoryRequest {
+  repeated Message messages = 1;
+  bool force_segment = 2;
+  bool force_extract = 3;
+}
+
+message Message {
+  string role = 1;     // "user" | "assistant" | "system"
+  string content = 2;
+}
+
+message AddMemoryResponse {
+  int32 memories_added = 1;
+  int32 facts_extracted = 2;
+}
+
+// ============================================================
+// Stats
+// ============================================================
+
+message StatsRequest {}
+
+message StatsResponse {
+  int32 total_memories = 1;
+  int32 total_facts = 2;
+  string oldest_memory = 3;
+  string newest_memory = 4;
+}
+
+// ============================================================
+// List / Get
+// ============================================================
+
+message ListRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+
+message ListResponse {
+  repeated Memory memories = 1;
+  int32 total = 2;
+}
+
+message GetRequest {
+  string id = 1;
+}
+
+message GetResponse {
+  Memory memory = 1;
+}
+
+// ============================================================
+// Export / Load
+// ============================================================
+
+message ExportRequest {
+  string format = 1;  // "jsonl" | "json"
+}
+
+message ExportResponse {
+  string data = 1;
+  int32 count = 2;
+}
+
+message LoadDataRequest {
+  string data = 1;    // JSONL content
+  string format = 2;  // "jsonl"
+}
+
+message LoadDataResponse {
+  int32 loaded = 1;
+}
+
+// ============================================================
+// Health
+// ============================================================
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;           // "ok" | "degraded" | "error"
+  string ollama_status = 2;
+  string storage_status = 3;
+  string version = 4;
+}
+
+// ============================================================
+// Shared Types
+// ============================================================
+
+message Memory {
+  string id = 1;
+  string content = 2;
+  float score = 3;
+  string category = 4;
+  string created_at = 5;
+  map<string, string> metadata = 6;
+}
 ```
-kinen-go/
-└── cmd/kinen-daemon/
-    ├── main.go              # Entry point (similar to cmd/kinen/)
-    └── handlers.go          # HTTP handlers wrapping service
+
+## Step 3: Update buf.gen.yaml
+
+```yaml
+version: v2
+plugins:
+  # Standard protobuf types
+  - local: protoc-gen-go
+    out: .
+    opt: paths=source_relative
+  
+  # Connect RPC (HTTP/gRPC)
+  - local: protoc-gen-connect-go
+    out: .
+    opt: paths=source_relative
+  
+  # MCP server generation
+  - local: protoc-gen-go-mcp
+    out: .
+    opt: paths=source_relative
 ```
 
-**That's it!** ~300-500 lines of code. The handlers just call existing `pkg/service` methods.
+## Step 4: Generate Code
 
-## Implementation Approach
+```bash
+cd /Users/sbellity/code/p/kinen-go
+buf generate api/kinen/kinen.proto
+```
 
-### Step 1: Look at Existing MCP Server
+This creates:
+```
+api/kinen/
+├── kinen.pb.go                    # Protobuf types
+├── kinenconnect/
+│   └── kinen.connect.go           # Connect handlers
+└── kinenmcp/
+    └── kinen.pb.mcp.go            # MCP handlers (generated!)
+```
 
-The MCP server at `cmd/kinen/mcp/handlers.go` shows EXACTLY how to call the service:
+## Step 5: Implement KinenServer
+
+Create `internal/server/kinen_server.go`:
 
 ```go
-// EXISTING CODE - handlers.go
-func (s *Server) handleSearch(ctx context.Context, params json.RawMessage) (interface{}, error) {
-    // Parse args...
+package server
+
+import (
+    "context"
+    
+    "connectrpc.com/connect"
+    kinenapi "github.com/sbellity/kinen/api/kinen"
+    "github.com/sbellity/kinen/pkg/service"
+)
+
+// KinenServer implements both Connect and MCP interfaces
+type KinenServer struct {
+    svc *service.MemoryService
+}
+
+func NewKinenServer(svc *service.MemoryService) *KinenServer {
+    return &KinenServer{svc: svc}
+}
+
+func (s *KinenServer) Search(
+    ctx context.Context,
+    req *connect.Request[kinenapi.SearchRequest],
+) (*connect.Response[kinenapi.SearchResponse], error) {
     opts := service.SearchOptions{
-        Limit:      args.Limit,
-        MinScore:   args.MinScore,
-        Categories: args.Categories,
-        Since:      sinceTime,
-        Until:      untilTime,
+        Limit:    int(req.Msg.Limit),
+        MinScore: req.Msg.MinScore,
     }
     
-    results, err := s.svc.Search(ctx, args.Query, opts)  // ← USE THIS!
-    // ...
-}
-```
-
-### Step 2: Create HTTP Handlers
-
-Your HTTP handlers are THIN wrappers around the same service calls:
-
-```go
-// cmd/kinen-daemon/handlers.go
-func SearchHandler(svc *service.MemoryService) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        var req SearchRequest
-        if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-            http.Error(w, err.Error(), http.StatusBadRequest)
-            return
-        }
-        
-        opts := service.SearchOptions{
-            Limit:    req.Limit,
-            MinScore: req.MinScore,
-        }
-        
-        results, err := svc.Search(r.Context(), req.Query, opts)
-        if err != nil {
-            http.Error(w, err.Error(), http.StatusInternalServerError)
-            return
-        }
-        
-        json.NewEncoder(w).Encode(SearchResponse{Results: results})
+    results, err := s.svc.Search(ctx, req.Msg.Query, opts)
+    if err != nil {
+        return nil, connect.NewError(connect.CodeInternal, err)
     }
+    
+    return connect.NewResponse(&kinenapi.SearchResponse{
+        Results: mapMemories(results),
+    }), nil
 }
+
+func (s *KinenServer) Health(
+    ctx context.Context,
+    req *connect.Request[kinenapi.HealthRequest],
+) (*connect.Response[kinenapi.HealthResponse], error) {
+    return connect.NewResponse(&kinenapi.HealthResponse{
+        Status:        "ok",
+        OllamaStatus:  "ok",
+        StorageStatus: "ok",
+        Version:       "0.1.0",
+    }), nil
+}
+
+// ... implement other methods similarly
 ```
 
-### Step 3: Wire Up Router
+## Step 6: Wire Connect into Daemon
+
+Create `cmd/kinen-daemon/main.go`:
 
 ```go
-// cmd/kinen-daemon/main.go
+package main
+
+import (
+    "net/http"
+    
+    "github.com/sbellity/kinen/api/kinen/kinenconnect"
+    "github.com/sbellity/kinen/internal/server"
+    "github.com/sbellity/kinen/pkg/service"
+    "golang.org/x/net/http2"
+    "golang.org/x/net/http2/h2c"
+)
+
 func main() {
-    cfg, _ := config.Load(configPath)
-    log := logger.New(cfg.Logger)
+    // Setup service (same as existing)
+    svc := setupService()
+    kinenServer := server.NewKinenServer(svc)
     
-    client, _ := api.New(cfg, api.WithLogger(log))
-    svc := service.NewMemoryService(client)
+    // Connect handler (HTTP + gRPC)
+    mux := http.NewServeMux()
+    path, handler := kinenconnect.NewKinenServiceHandler(kinenServer)
+    mux.Handle(path, handler)
     
-    r := chi.NewRouter()
-    r.Use(middleware.Logger)
-    r.Use(middleware.Recoverer)
-    r.Use(cors.Handler(cors.Options{AllowedOrigins: []string{"*"}}))
+    // h2c for gRPC without TLS
+    h2s := &http2.Server{}
+    srv := &http.Server{
+        Addr:    ":7319",
+        Handler: h2c.NewHandler(mux, h2s),
+    }
     
-    r.Get("/api/v1/health", HealthHandler())
-    r.Post("/api/v1/search", SearchHandler(svc))
-    r.Post("/api/v1/memory/add", AddMemoryHandler(svc))
-    r.Get("/api/v1/stats", StatsHandler(svc))
-    r.Get("/api/v1/memories", ListMemoriesHandler(svc))
-    r.Get("/api/v1/memories/{id}", GetMemoryHandler(svc))
-    r.Post("/api/v1/export", ExportHandler(svc))
-    
-    http.ListenAndServe(":7319", r)
+    srv.ListenAndServe()
 }
 ```
 
-## Endpoints (Map to Existing Service Methods)
+## Step 7: Wire MCP into CLI (Replace Hand-Written)
 
-| Endpoint | HTTP | Service Method |
-|----------|------|----------------|
-| `/api/v1/health` | GET | new (check Ollama, storage) |
-| `/api/v1/search` | POST | `svc.Search()` |
-| `/api/v1/memory/add` | POST | `svc.AddMemory()` |
-| `/api/v1/stats` | GET | `svc.GetStats()` |
-| `/api/v1/memories` | GET | `svc.ListMemories()` |
-| `/api/v1/memories/{id}` | GET | `svc.GetMemory()` |
-| `/api/v1/export` | POST | `svc.Export()` |
-| `/api/v1/data/load` | POST | `svc.LoadData()` |
+Update `cmd/kinen/mcp.go` to use generated MCP handlers:
+
+```go
+package main
+
+import (
+    "github.com/mark3labs/mcp-go/server"
+    "github.com/sbellity/kinen/api/kinen/kinenmcp"
+    kinenserver "github.com/sbellity/kinen/internal/server"
+)
+
+func runMCP() {
+    svc := setupService()
+    kinenServer := kinenserver.NewKinenServer(svc)
+    
+    // Create MCP server
+    mcpServer := server.NewMCPServer("kinen", "0.1.0")
+    
+    // Register generated handlers (ONE LINE!)
+    kinenmcp.ForwardToKinenServiceHandler(mcpServer, kinenServer)
+    
+    // Serve over stdio
+    mcpServer.ServeStdio()
+}
+```
+
+**Then DELETE the old hand-written code:**
+```bash
+rm cmd/kinen/mcp/server.go
+rm cmd/kinen/mcp/handlers.go
+rm cmd/kinen/mcp/schemas.go
+```
 
 ## Tasks
 
 | Task | Description | LOE |
 |------|-------------|-----|
-| `1A.1` | main.go with Chi router | 1h |
-| `1A.2` | Health endpoint | 30m |
-| `1A.3` | Search/AddMemory handlers | 1h |
-| `1A.4` | Stats/List/Get handlers | 1h |
-| `1A.5` | Export/LoadData handlers | 30m |
-| `1A.6` | Daemon lifecycle (signals) | 30m |
+| `1A.1` | Create `api/kinen/kinen.proto` | 1h |
+| `1A.2` | Install protoc-gen-go-mcp, update buf.gen.yaml | 30m |
+| `1A.3` | Generate Connect + MCP code | 15m |
+| `1A.4` | Implement `internal/server/kinen_server.go` | 1.5h |
+| `1A.5` | Create `cmd/kinen-daemon/main.go` | 30m |
+| `1A.6` | Update MCP command to use generated handlers | 30m |
 
-**Total LOE: ~5 hours**
+**Total: ~4.5 hours**
 
 ## Test Commands
 
 ```bash
 # Build
-cd /Users/sbellity/code/p/kinen-go
+go build -o kinen ./cmd/kinen
 go build -o kinen-daemon ./cmd/kinen-daemon
 
-# Run (use existing config from docs/examples/)
-./kinen-daemon --config config.yaml
+# Test HTTP (Connect protocol)
+./kinen-daemon &
+curl -X POST http://localhost:7319/kinen.KinenService/Health \
+  -H "Content-Type: application/json" -d '{}'
 
-# Test health
-curl http://localhost:7319/api/v1/health
-
-# Test search
-curl -X POST http://localhost:7319/api/v1/search \
+curl -X POST http://localhost:7319/kinen.KinenService/Search \
   -H "Content-Type: application/json" \
   -d '{"query": "test", "limit": 5}'
+
+# Test MCP (stdio)
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | ./kinen mcp
 ```
 
 ## Success Criteria
 
 ```bash
-# All must pass
-curl -s http://localhost:7319/api/v1/health | jq '.status'
-# → "ok"
+# HTTP works
+curl -s -X POST http://localhost:7319/kinen.KinenService/Health \
+  -d '{}' | jq -e '.status == "ok"'
 
-curl -s -X POST http://localhost:7319/api/v1/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "test", "limit": 5}' | jq '.results'
-# → Array (may be empty)
+# MCP works (same functionality, generated code)
+echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"kinen_health"},"id":1}' \
+  | ./kinen mcp | jq -e '.result'
 
-# Graceful shutdown
-kill -TERM $(pgrep kinen-daemon)
-# → Clean exit, no panic
+# Old MCP code deleted
+test ! -f cmd/kinen/mcp/handlers.go
 ```
 
-## Key Files to Study
+## Key Principle
 
-1. **`cmd/kinen/mcp/handlers.go`** - COPY THIS PATTERN for HTTP
-2. **`pkg/service/memory.go`** - Service methods you're wrapping
-3. **`pkg/api/client.go`** - Client interface
-4. **`internal/config/config.go`** - Config loading
+**One schema, zero hand-written transport code.**
 
-## Notes
+The proto file defines the API contract. Everything else is generated:
+- Types (protoc-gen-go)
+- HTTP/gRPC handlers (protoc-gen-connect-go)
+- MCP handlers (protoc-gen-go-mcp)
 
-- Use `github.com/go-chi/chi/v5` for routing (add to go.mod)
-- Use existing `internal/logger` for logging
-- Port 7319 (kinen in phone keypad)
-- This should be ~300-500 lines of code MAX
+If you're writing transport boilerplate, you're doing it wrong.
 
-## Questions?
+## References
 
-If blocked, create a beads issue:
+- [Connect RPC Getting Started](https://connectrpc.com/docs/go/getting-started)
+- [protoc-gen-go-mcp](https://github.com/redpanda-data/protoc-gen-go-mcp)
+- [Redpanda Blog: Turn gRPC into MCP](https://www.redpanda.com/blog/turn-grpc-api-into-mcp-server)
+
+## Questions & Blockers
+
+**Use beads to communicate questions and blockers.** A coordinator will monitor and respond.
+
+### When Blocked
+
 ```bash
-bd create "Blocked: Need clarification on X" -t task -p 0 --labels "blocked"
+# Create a blocker issue assigned to coordinator
+bd create "BLOCKED [1A]: [describe what's blocking you]" \
+  -t task -p 0 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-0ed \
+  --notes "Context: [what you've tried, what you need]"
 ```
 
-Good luck! 🚀
+### When You Have a Question
 
+```bash
+# Create a question issue assigned to coordinator
+bd create "QUESTION [1A]: [your question]" \
+  -t task -p 1 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-0ed \
+  --notes "Options I'm considering: [A, B, C]"
+```
+
+### When You Need a Decision
+
+```bash
+# Create a decision request assigned to coordinator
+bd create "DECISION [1A]: [what needs deciding]" \
+  -t task -p 1 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-0ed \
+  --notes "Trade-offs: [option A pros/cons, option B pros/cons]"
+```
+
+### Best Practices
+
+1. **Be specific** — Include file paths, error messages, code snippets
+2. **Show your work** — What did you try? What did you learn?
+3. **Propose options** — Don't just ask "what should I do?" — propose 2-3 options with trade-offs
+4. **Link to track** — Always use `--deps discovered-from:kinen-0ed` (Track 1A epic)
+5. **Check existing issues** — Run `bd list` first to avoid duplicates
+
+### Monitoring
+
+The coordinator monitors beads for:
+- Issues with `BLOCKED`, `QUESTION`, `DECISION` in title
+- High priority (P0, P1) issues
+- Issues linked to track epics
+
+Expect response within 1-2 hours during active development.
+
+**Full protocol**: See `collaboration.md` in this directory.

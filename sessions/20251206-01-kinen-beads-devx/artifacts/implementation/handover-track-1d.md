@@ -3,9 +3,21 @@ artifact_type: agent_handover
 track: "1D"
 track_name: "File Watcher + Delta Index"
 date: 2025-12-06
+epic_id: kinen-ner
 ---
 
 # Agent Handover: Track 1D - File Watcher + Delta Index
+
+> [!warning] MANDATORY: Beads Status Updates
+> **You MUST update beads** — chat is NOT a communication channel!
+> 
+> 1. **Start**: `bd update kinen-ner --status in_progress --notes "Starting Track 1D"`
+> 2. **Every 30-60 min**: `bd update TASK_ID --notes "Progress: [status]"`
+> 3. **When blocked**: `bd create "BLOCKED [1D]: [issue]" -t task -p 0 --assignee coordinator \
+  --deps discovered-from:kinen-ner`
+> 4. **Before ending**: Update ALL tasks with current status
+> 
+> **See `collaboration.md` for full protocol.**
 
 ## Your Mission
 
@@ -208,6 +220,22 @@ go test ./internal/watcher/... -tags=integration -v
 - Log all index updates
 - Handle file deletions (remove chunks)
 - Handle file moves (delete old, index new)
+
+## Questions & Blockers
+
+**Use beads to communicate questions and blockers.** A coordinator will monitor and respond.
+
+```bash
+# When blocked
+bd create "BLOCKED [1D]: [describe issue]" -t task -p 0 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-ner --notes "Context: [details]"
+
+# When you have a question
+bd create "QUESTION [1D]: [your question]" -t task -p 1 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-ner --notes "Options: [A, B, C]"
+```
 
 Good luck! 🚀
 

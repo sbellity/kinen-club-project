@@ -3,9 +3,21 @@ artifact_type: agent_handover
 track: "1C"
 track_name: "LanceDB Storage"
 date: 2025-12-06
+epic_id: kinen-vp0
 ---
 
 # Agent Handover: Track 1C - LanceDB Storage
+
+> [!warning] MANDATORY: Beads Status Updates
+> **You MUST update beads** — chat is NOT a communication channel!
+> 
+> 1. **Start**: `bd update kinen-vp0 --status in_progress --notes "Starting Track 1C"`
+> 2. **Every 30-60 min**: `bd update TASK_ID --notes "Progress: [status]"`
+> 3. **When blocked**: `bd create "BLOCKED [1C]: [issue]" -t task -p 0 --assignee coordinator \
+  --deps discovered-from:kinen-vp0`
+> 4. **Before ending**: Update ALL tasks with current status
+> 
+> **See `collaboration.md` for full protocol.**
 
 ## Your Mission
 
@@ -309,12 +321,41 @@ func TestBacklinks(t *testing.T) {
 - Use connection pooling if available
 - Implement cleanup/vacuum for deleted chunks
 
-## Questions?
+## Questions & Blockers
 
-If blocked, create a beads issue:
+**Use beads to communicate questions and blockers.** A coordinator will monitor and respond.
+
+### When Blocked
+
 ```bash
-bd create "Blocked: Need clarification on X" -t task -p 0 --labels "blocked"
+bd create "BLOCKED [1C]: [describe what's blocking you]" \
+  -t task -p 0 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-vp0 \
+  --notes "Context: [what you've tried, what you need]"
 ```
+
+### When You Have a Question
+
+```bash
+bd create "QUESTION [1C]: [your question]" \
+  -t task -p 1 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-vp0 \
+  --notes "Options I'm considering: [A, B, C]"
+```
+
+### Best Practices
+
+1. **Be specific** — Include file paths, error messages, code snippets
+2. **Show your work** — What did you try? What did you learn?
+3. **Propose options** — Don't just ask "what should I do?" — propose 2-3 options
+4. **Link to track** — Always use `--assignee coordinator \
+  --deps discovered-from:kinen-vp0` (Track 1C epic)
+
+Expect response within 1-2 hours during active development.
+
+**Full protocol**: See `collaboration.md` in this directory.
 
 Good luck! 🚀
 

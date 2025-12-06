@@ -3,9 +3,21 @@ artifact_type: agent_handover
 track: "3"
 track_name: "VSCode Extension"
 date: 2025-12-06
+epic_id: kinen-q7o
 ---
 
 # Agent Handover: Track 3 - VSCode Extension
+
+> [!warning] MANDATORY: Beads Status Updates
+> **You MUST update beads** — chat is NOT a communication channel!
+> 
+> 1. **Start**: `bd update kinen-q7o --status in_progress --notes "Starting Track 3"`
+> 2. **Every 30-60 min**: `bd update TASK_ID --notes "Progress: [status]"`
+> 3. **When blocked**: `bd create "BLOCKED [3]: [issue]" -t task -p 0 --assignee coordinator \
+  --deps discovered-from:kinen-q7o`
+> 4. **Before ending**: Update ALL tasks with current status
+> 
+> **See `collaboration.md` for full protocol.**
 
 ## Your Mission
 
@@ -232,6 +244,22 @@ vscode.commands.registerCommand('kinen.search', async () => {
 - Once tests exist, iterate autonomously on bugs (3.0.1)
 - Search features (3.1-3.4) depend on daemon being ready
 - Use `xvfb-run` on Linux for headless VSCode testing
+
+## Questions & Blockers
+
+**Use beads to communicate questions and blockers.** A coordinator will monitor and respond.
+
+```bash
+# When blocked
+bd create "BLOCKED [3]: [describe issue]" -t task -p 0 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-q7o --notes "Context: [details]"
+
+# When you have a question
+bd create "QUESTION [3]: [your question]" -t task -p 1 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-q7o --notes "Options: [A, B, C]"
+```
 
 Good luck! 🚀
 

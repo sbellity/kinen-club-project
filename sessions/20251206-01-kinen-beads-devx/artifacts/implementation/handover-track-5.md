@@ -3,9 +3,21 @@ artifact_type: agent_handover
 track: "5"
 track_name: "Distribution"
 date: 2025-12-06
+epic_id: kinen-08r
 ---
 
 # Agent Handover: Track 5 - Distribution
+
+> [!warning] MANDATORY: Beads Status Updates
+> **You MUST update beads** — chat is NOT a communication channel!
+> 
+> 1. **Start**: `bd update kinen-08r --status in_progress --notes "Starting Track 5"`
+> 2. **Every 30-60 min**: `bd update TASK_ID --notes "Progress: [status]"`
+> 3. **When blocked**: `bd create "BLOCKED [5]: [issue]" -t task -p 0 --assignee coordinator \
+  --deps discovered-from:kinen-08r`
+> 4. **Before ending**: Update ALL tasks with current status
+> 
+> **See `collaboration.md` for full protocol.**
 
 ## Your Mission
 
@@ -270,6 +282,24 @@ This is optional and lower priority than core distribution.
 - Version from git tag
 - SHA256 checksums required for Homebrew
 - Test on both Intel and Apple Silicon Macs
+
+## Questions & Blockers
+
+**Use beads to communicate questions and blockers.** A coordinator will monitor and respond.
+
+```bash
+# When blocked
+bd create "BLOCKED [5]: [describe issue]" -t task -p 0 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-08r --notes "Context: [details]"
+
+# When you have a question
+bd create "QUESTION [5]: [your question]" -t task -p 1 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-08r --notes "Options: [A, B, C]"
+```
+
+**Full protocol**: See `collaboration.md` in this directory.
 
 Good luck! 🚀
 

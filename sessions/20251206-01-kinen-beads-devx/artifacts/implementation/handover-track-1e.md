@@ -3,9 +3,21 @@ artifact_type: agent_handover
 track: "1E"
 track_name: "Memory Consolidation"
 date: 2025-12-06
+epic_id: kinen-ea7
 ---
 
 # Agent Handover: Track 1E - Memory Consolidation
+
+> [!warning] MANDATORY: Beads Status Updates
+> **You MUST update beads** — chat is NOT a communication channel!
+> 
+> 1. **Start**: `bd update kinen-ea7 --status in_progress --notes "Starting Track 1E"`
+> 2. **Every 30-60 min**: `bd update TASK_ID --notes "Progress: [status]"`
+> 3. **When blocked**: `bd create "BLOCKED [1E]: [issue]" -t task -p 0 --assignee coordinator \
+  --deps discovered-from:kinen-ea7`
+> 4. **Before ending**: Update ALL tasks with current status
+> 
+> **See `collaboration.md` for full protocol.**
 
 ## Your Mission
 
@@ -143,6 +155,22 @@ ls sessions/20251206-01-kinen-beads-devx/memories/
 - Confidence: 1.0 for explicit `[!note] Decision`, 0.8 for `[!note] Answer`
 - Skip empty answers
 - Idempotent: re-running doesn't create duplicates
+
+## Questions & Blockers
+
+**Use beads to communicate questions and blockers.** A coordinator will monitor and respond.
+
+```bash
+# When blocked
+bd create "BLOCKED [1E]: [describe issue]" -t task -p 0 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-ea7 --notes "Context: [details]"
+
+# When you have a question
+bd create "QUESTION [1E]: [your question]" -t task -p 1 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-ea7 --notes "Options: [A, B, C]"
+```
 
 Good luck! 🚀
 

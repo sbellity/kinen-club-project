@@ -95,18 +95,23 @@ After deep review of `/Users/sbellity/code/p/kinen-go`:
 
 | Track | Scope | LOE |
 |-------|-------|-----|
-| **1A** | HTTP API wrapper (for existing kinen-go) | 1-2 days |
+| **1A** | Proto-First API (Connect + MCP generated) | 4-5 hours |
 | **1B** | Kinen markdown parser (sessions/rounds/wiki-links) | 2-3 days |
 | **1C** | LanceDB adapter (OPTIONAL - spike first) | 2-3 days |
 | **1D** | File watcher (delta indexing) | 1-2 days |
 | **1E** | Decision consolidation (rounds → memory files) | 1-2 days |
 | **1F** | PDF/Resource parser | 1-2 days |
-| **2** | TS CLI daemon client | 2-3 days |
+| **2** | Port sessions/spaces to Go CLI | 1-2 days |
 | **3** | VSCode extension (tests + search) | 3-4 days |
 | **4** | Obsidian compatibility | 2-3 days |
 | **5** | Distribution (Homebrew, launchd) | 2-3 days |
 
-**Total: ~7 days** with parallel execution
+**Total: ~6 days** with parallel execution
+
+> [!note] Architecture Decisions
+> - **Track 1A**: One proto → HTTP + gRPC + MCP. Using [Connect RPC](https://connectrpc.com/) + [protoc-gen-go-mcp](https://github.com/redpanda-data/protoc-gen-go-mcp). Deletes hand-written MCP server.
+> - **Track 2**: Go-only CLI. TypeScript CLI deprecated. Single binary does everything.
+> - **VSCode**: Uses generated TypeScript client from Connect proto.
 
 ## Artifacts Produced
 

@@ -3,9 +3,21 @@ artifact_type: agent_handover
 track: "1F"
 track_name: "PDF + Resources"
 date: 2025-12-06
+epic_id: kinen-5iv
 ---
 
 # Agent Handover: Track 1F - PDF + Resources
+
+> [!warning] MANDATORY: Beads Status Updates
+> **You MUST update beads** — chat is NOT a communication channel!
+> 
+> 1. **Start**: `bd update kinen-5iv --status in_progress --notes "Starting Track 1F"`
+> 2. **Every 30-60 min**: `bd update TASK_ID --notes "Progress: [status]"`
+> 3. **When blocked**: `bd create "BLOCKED [1F]: [issue]" -t task -p 0 --assignee coordinator \
+  --deps discovered-from:kinen-5iv`
+> 4. **Before ending**: Update ALL tasks with current status
+> 
+> **See `collaboration.md` for full protocol.**
 
 ## Your Mission
 
@@ -143,6 +155,22 @@ curl -X POST http://localhost:7319/api/v1/search \
 - Chunk PDFs by page (natural boundaries)
 - Preserve source_url for web clips
 - Resources get `type: "resource"` in index
+
+## Questions & Blockers
+
+**Use beads to communicate questions and blockers.** A coordinator will monitor and respond.
+
+```bash
+# When blocked
+bd create "BLOCKED [1F]: [describe issue]" -t task -p 0 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-5iv --notes "Context: [details]"
+
+# When you have a question
+bd create "QUESTION [1F]: [your question]" -t task -p 1 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-5iv --notes "Options: [A, B, C]"
+```
 
 Good luck! 🚀
 

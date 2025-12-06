@@ -3,9 +3,21 @@ artifact_type: agent_handover
 track: "1B"
 track_name: "Kinen Session/Round Parser"
 date: 2025-12-06
+epic_id: kinen-2w9
 ---
 
 # Agent Handover: Track 1B - Kinen Session/Round Parser
+
+> [!warning] MANDATORY: Beads Status Updates
+> **You MUST update beads** — chat is NOT a communication channel!
+> 
+> 1. **Start**: `bd update kinen-2w9 --status in_progress --notes "Starting Track 1B"`
+> 2. **Every 30-60 min**: `bd update TASK_ID --notes "Progress: [status]"`
+> 3. **When blocked**: `bd create "BLOCKED [1B]: [issue]" -t task -p 0 --assignee coordinator \
+  --deps discovered-from:kinen-2w9`
+> 4. **Before ending**: Update ALL tasks with current status
+> 
+> **See `collaboration.md` for full protocol.**
 
 ## Your Mission
 
@@ -322,12 +334,41 @@ import (
 - Line numbers are 1-indexed
 - Context around wiki-links should be ~50 chars before and after
 
-## Questions?
+## Questions & Blockers
 
-If blocked, create a beads issue:
+**Use beads to communicate questions and blockers.** A coordinator will monitor and respond.
+
+### When Blocked
+
 ```bash
-bd create "Blocked: Need clarification on X" -t task -p 0 --labels "blocked"
+bd create "BLOCKED [1B]: [describe what's blocking you]" \
+  -t task -p 0 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-2w9 \
+  --notes "Context: [what you've tried, what you need]"
 ```
+
+### When You Have a Question
+
+```bash
+bd create "QUESTION [1B]: [your question]" \
+  -t task -p 1 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-2w9 \
+  --notes "Options I'm considering: [A, B, C]"
+```
+
+### Best Practices
+
+1. **Be specific** — Include file paths, error messages, code snippets
+2. **Show your work** — What did you try? What did you learn?
+3. **Propose options** — Don't just ask "what should I do?" — propose 2-3 options
+4. **Link to track** — Always use `--assignee coordinator \
+  --deps discovered-from:kinen-2w9` (Track 1B epic)
+
+Expect response within 1-2 hours during active development.
+
+**Full protocol**: See `collaboration.md` in this directory.
 
 Good luck! 🚀
 

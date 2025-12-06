@@ -1,243 +1,338 @@
 ---
 artifact_type: agent_handover
 track: "2"
-track_name: "TypeScript CLI + MCP"
+track_name: "Port Sessions/Spaces to Go"
 date: 2025-12-06
+epic_id: kinen-sqc
 ---
 
-# Agent Handover: Track 2 - TypeScript CLI + MCP
+# Agent Handover: Track 2 - Port Sessions/Spaces to Go
+
+> [!warning] MANDATORY: Beads Status Updates
+> **You MUST update beads** — chat is NOT a communication channel!
+> 
+> 1. **Start**: `bd update kinen-sqc --status in_progress --notes "Starting Track 2"`
+> 2. **Every 30-60 min**: `bd update TASK_ID --notes "Progress: [status]"`
+> 3. **When blocked**: `bd create "BLOCKED [2]: [issue]" -t task -p 0 --assignee coordinator \
+  --deps discovered-from:kinen-sqc`
+> 4. **Before ending**: Update ALL tasks with current status
+> 
+> **See `collaboration.md` for full protocol.**
 
 ## Your Mission
 
-Update the existing kinen TypeScript CLI and MCP server to talk to the Go daemon via HTTP instead of doing everything locally.
+Port session and space management from the TypeScript CLI to Go. After this, we have ONE binary that does everything:
+
+```bash
+kinen session new "topic"    # Create session
+kinen session list           # List sessions
+kinen space switch default   # Switch space
+kinen search "query"         # Search memories
+kinen mcp                    # MCP server
+kinen daemon                 # HTTP API server
+```
 
 ## Context
 
-- **Workspace**: `/Users/sbellity/code/kinen/kinen` (TypeScript package)
-- **Dependencies**: Track 1A (HTTP API must exist)
-- **Can start**: Design and DaemonClient with mocks
+- **Target**: `/Users/sbellity/code/p/kinen-go`
+- **Reference**: `/Users/sbellity/code/kinen/kinen/src/` (TypeScript to port)
+- **Depends on**: Track 1B (parser) for reading existing sessions
 
-## What Already Exists
-
-```
-kinen/
-├── src/
-│   ├── index.ts           # CLI entry
-│   ├── mcp.ts             # MCP server
-│   ├── commands/
-│   │   ├── session.ts     # Session management
-│   │   ├── space.ts       # Space management
-│   │   └── ...
-│   └── lib/
-│       ├── sessions.ts    # Session operations
-│       ├── spaces.ts      # Space operations
-│       └── config.ts      # Config loading
-└── package.json
-```
-
-## What You'll Build
+## What Already Exists in kinen-go
 
 ```
-kinen/
-└── src/
-    ├── lib/
-    │   └── daemon-client.ts  # NEW: HTTP client
-    ├── commands/
-    │   ├── search.ts         # NEW: Search command
-    │   ├── backlinks.ts      # NEW: Backlinks command
-    │   └── index.ts          # NEW: Index commands
-    └── mcp.ts                # UPDATE: Use daemon
+kinen-go/
+├── cmd/kinen/
+│   ├── main.go              # ✅ CLI entry with Cobra
+│   └── mcp/                  # ✅ MCP server
+├── pkg/
+│   ├── api/                  # ✅ Public API
+│   └── service/              # ✅ Memory service
+└── internal/
+    ├── config/               # ✅ Config (Viper)
+    └── ...                   # ✅ All memory infrastructure
 ```
 
-## DaemonClient Interface
+**Missing**: Session/space management commands
 
-```typescript
-// src/lib/daemon-client.ts
-export interface SearchResult {
-  path: string;
-  content: string;
-  score: number;
-  type: string;
-  session: string;
-  metadata: Record<string, unknown>;
+## What to Port from TypeScript
+
+Review these files in `/Users/sbellity/code/kinen/kinen/src/`:
+
+| TS File | What to Port |
+|---------|--------------|
+| `lib/sessions.ts` | `createSession()`, `listSessions()`, `getCurrentSession()` |
+| `lib/spaces.ts` | `listSpaces()`, `switchSpace()`, `getCurrentSpace()` |
+| `lib/config.ts` | Space path resolution, config structure |
+| `commands/session.ts` | CLI commands for sessions |
+| `commands/space.ts` | CLI commands for spaces |
+
+## Implementation
+
+### 1. Session Types + Logic
+
+```go
+// internal/kinen/sessions.go
+package kinen
+
+import (
+    "os"
+    "path/filepath"
+    "time"
+    "gopkg.in/yaml.v3"
+)
+
+type Session struct {
+    Name      string    `yaml:"name"`
+    Path      string    `yaml:"-"`
+    Type      string    `yaml:"type"`      // architecture, implementation, research, writing
+    Status    string    `yaml:"status"`    // in-progress, complete
+    Created   time.Time `yaml:"created"`
+    Completed time.Time `yaml:"completed,omitempty"`
 }
 
-export interface IndexStatus {
-  space: string;
-  chunks: number;
-  edges: number;
-  lastIndexed: string;
-  staleFiles: string[];
+type SessionInit struct {
+    Created time.Time `yaml:"created"`
+    Type    string    `yaml:"type"`
+    Status  string    `yaml:"status"`
 }
 
-export class DaemonClient {
-  private baseUrl: string;
-  
-  constructor(baseUrl = 'http://localhost:7319') {
-    this.baseUrl = baseUrl;
-  }
-
-  async health(): Promise<{ status: string; version: string }> {
-    const res = await fetch(`${this.baseUrl}/api/v1/health`);
-    if (!res.ok) throw new Error('Daemon unavailable');
-    return res.json();
-  }
-
-  async search(query: string, space: string, options?: {
-    limit?: number;
-    filters?: Record<string, unknown>;
-  }): Promise<SearchResult[]> {
-    const res = await fetch(`${this.baseUrl}/api/v1/search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, space, ...options }),
-    });
-    if (!res.ok) throw new Error(`Search failed: ${res.status}`);
-    const data = await res.json();
-    return data.results;
-  }
-
-  async buildIndex(space: string, force = false): Promise<{
-    status: string;
-    chunks: number;
-    durationMs: number;
-  }> {
-    const res = await fetch(`${this.baseUrl}/api/v1/index/build`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ space, force }),
-    });
-    return res.json();
-  }
-
-  async indexStatus(space: string): Promise<IndexStatus> {
-    const res = await fetch(
-      `${this.baseUrl}/api/v1/index/status?space=${encodeURIComponent(space)}`
-    );
-    return res.json();
-  }
-
-  async backlinks(path: string): Promise<{
-    path: string;
-    backlinks: Array<{ from: string; context: string }>;
-  }> {
-    const res = await fetch(
-      `${this.baseUrl}/api/v1/backlinks?path=${encodeURIComponent(path)}`
-    );
-    return res.json();
-  }
-
-  async consolidate(session: string, dryRun = false): Promise<{
-    decisions: Array<{ id: string; text: string; confidence: number }>;
-  }> {
-    const res = await fetch(`${this.baseUrl}/api/v1/memory/consolidate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session, dry_run: dryRun }),
-    });
-    return res.json();
-  }
-}
-```
-
-## Auto-Start Daemon
-
-```typescript
-// src/lib/daemon-client.ts
-import { spawn } from 'child_process';
-
-async function ensureDaemon(client: DaemonClient): Promise<void> {
-  try {
-    await client.health();
-    return; // Already running
-  } catch {
-    console.log('Starting kinen daemon...');
-    spawn('kinen-daemon', [], {
-      detached: true,
-      stdio: 'ignore',
-    }).unref();
+func CreateSession(spacePath, name, sessionType string) (*Session, error) {
+    // Generate folder name: YYYYMMDD-NN-slug
+    datePrefix := time.Now().Format("20060102")
+    slug := slugify(name)
     
-    // Wait for daemon to start
-    for (let i = 0; i < 30; i++) {
-      await new Promise(r => setTimeout(r, 100));
-      try {
-        await client.health();
-        return;
-      } catch {}
+    // Find next sequence number for today
+    existing, _ := filepath.Glob(filepath.Join(spacePath, "sessions", datePrefix+"-*"))
+    seq := len(existing) + 1
+    
+    folderName := fmt.Sprintf("%s-%02d-%s", datePrefix, seq, slug)
+    sessionPath := filepath.Join(spacePath, "sessions", folderName)
+    
+    // Create directories
+    os.MkdirAll(filepath.Join(sessionPath, "rounds"), 0755)
+    os.MkdirAll(filepath.Join(sessionPath, "artifacts"), 0755)
+    
+    // Create init.md
+    init := SessionInit{
+        Created: time.Now(),
+        Type:    sessionType,
+        Status:  "in-progress",
     }
-    throw new Error('Failed to start daemon');
-  }
+    // ... write init.md with frontmatter
+    
+    return &Session{Name: name, Path: sessionPath, Type: sessionType, Created: time.Now()}, nil
+}
+
+func ListSessions(spacePath string) ([]Session, error) {
+    // Scan sessions/ directory
+    // Parse init.md frontmatter from each
+    // Sort by created date descending
+}
+
+func GetCurrentSession(spacePath string) (*Session, error) {
+    // Find most recent in-progress session
+}
+```
+
+### 2. Space Types + Logic
+
+```go
+// internal/kinen/spaces.go
+package kinen
+
+type Space struct {
+    Name string
+    Path string
+}
+
+func ListSpaces(configPath string) ([]Space, error) {
+    // Read ~/.kinen/config.yml
+    // Return list of configured spaces
+}
+
+func GetCurrentSpace() (*Space, error) {
+    // Read current space from config or env
+}
+
+func SwitchSpace(name string) error {
+    // Update current space in config
+}
+```
+
+### 3. CLI Commands
+
+```go
+// cmd/kinen/commands/session.go
+package commands
+
+import "github.com/spf13/cobra"
+
+func SessionCmd() *cobra.Command {
+    cmd := &cobra.Command{
+        Use:   "session",
+        Short: "Manage kinen sessions",
+    }
+    cmd.AddCommand(sessionNewCmd())
+    cmd.AddCommand(sessionListCmd())
+    cmd.AddCommand(sessionCurrentCmd())
+    return cmd
+}
+
+func sessionNewCmd() *cobra.Command {
+    var sessionType string
+    cmd := &cobra.Command{
+        Use:   "new [name]",
+        Short: "Create a new session",
+        Args:  cobra.ExactArgs(1),
+        RunE: func(cmd *cobra.Command, args []string) error {
+            space, _ := kinen.GetCurrentSpace()
+            session, err := kinen.CreateSession(space.Path, args[0], sessionType)
+            if err != nil {
+                return err
+            }
+            fmt.Printf("Created session: %s\n", session.Path)
+            return nil
+        },
+    }
+    cmd.Flags().StringVarP(&sessionType, "type", "t", "architecture", "Session type")
+    return cmd
+}
+
+// ... similar for list, current
+```
+
+### 4. Wire into Main
+
+```go
+// cmd/kinen/main.go
+func main() {
+    rootCmd := &cobra.Command{Use: "kinen"}
+    
+    // Existing
+    rootCmd.AddCommand(mcpCmd())
+    rootCmd.AddCommand(daemonCmd())  // Track 1A
+    
+    // New (this track)
+    rootCmd.AddCommand(commands.SessionCmd())
+    rootCmd.AddCommand(commands.SpaceCmd())
+    rootCmd.AddCommand(commands.SearchCmd())
+    rootCmd.AddCommand(commands.IndexCmd())
+    
+    rootCmd.Execute()
 }
 ```
 
 ## Tasks
 
-| Task | Description | Acceptance |
-|------|-------------|------------|
-| `2.1` | DaemonClient class | All API methods, error handling |
-| `2.2` | `kinen search` command | `kinen search "query" --json` |
-| `2.3` | `kinen backlinks` command | `kinen backlinks path/to/file.md` |
-| `2.4` | `kinen index` commands | `kinen index build`, `kinen index status` |
-| `2.5` | MCP tools update | `kinen_search`, `kinen_backlinks` use daemon |
-| `2.6` | Auto-start daemon | Start daemon if not running |
+| Task | Description | LOE |
+|------|-------------|-----|
+| `2.1` | Space management (internal/kinen/spaces.go) | 2h |
+| `2.2` | Session management (internal/kinen/sessions.go) | 3h |
+| `2.3` | Round creation (create new round files) | 2h |
+| `2.4` | CLI commands (cmd/kinen/commands/) | 2h |
+| `2.5` | Search/Index commands (wrap service) | 1h |
+| `2.6` | Integration test | 1h |
 
-## CLI Commands
+**Total: ~11 hours (1.5 days)**
+
+## Commands After This Track
 
 ```bash
-# Search
-kinen search "authentication design"
-kinen search "auth" --limit 5 --json
+# Space management
+kinen space list
+kinen space switch <name>
+kinen space current
 
-# Backlinks
-kinen backlinks sessions/20251206-01/rounds/01.md
+# Session management
+kinen session new "topic" --type architecture
+kinen session list
+kinen session current
+
+# Round management
+kinen round new              # Creates next round in current session
+
+# Search (wraps existing service)
+kinen search "query" --limit 10 --json
 
 # Index
 kinen index build
-kinen index build --force
 kinen index status
-```
 
-## MCP Tools Update
-
-```typescript
-// src/mcp.ts
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const client = new DaemonClient();
-  await ensureDaemon(client);
-  
-  switch (request.params.name) {
-    case 'kinen_search': {
-      const { query, limit } = request.params.arguments;
-      const space = await getCurrentSpacePath();
-      const results = await client.search(query, space, { limit });
-      return { content: [{ type: 'text', text: JSON.stringify(results) }] };
-    }
-    // ... other tools
-  }
-});
+# Existing
+kinen mcp                    # MCP server
+kinen daemon                 # HTTP API (Track 1A)
 ```
 
 ## Success Criteria
 
 ```bash
-# CLI works
-kinen search "LanceDB" --json | jq '.results[0].path'
-# → Returns path
+# Create session
+kinen session new "test-session" --type architecture
+ls sessions/  # → Shows new session folder
 
-# MCP works (test via Cursor)
-# kinen_search tool returns results
+# List sessions
+kinen session list  # → Shows sessions with dates, types, status
 
-# Auto-start works
-pkill kinen-daemon
-kinen search "test"  # Should auto-start daemon
+# Search
+kinen search "test" --json | jq '.results'
+
+# Full workflow
+kinen space switch default
+kinen session new "my-topic"
+kinen round new
+# → Created sessions/YYYYMMDD-01-my-topic/rounds/01-foundation.md
 ```
+
+## Key Files to Study
+
+**TypeScript (what to port):**
+1. `kinen/src/lib/sessions.ts` - Session logic
+2. `kinen/src/lib/spaces.ts` - Space logic  
+3. `kinen/src/commands/session.ts` - CLI structure
+
+**Go (where to add):**
+1. `cmd/kinen/main.go` - Entry point
+2. `internal/config/config.go` - Config patterns
 
 ## Notes
 
-- Use native `fetch` (Node 18+)
-- JSON output for `--json` flag
-- Pretty output for human consumption
-- Error messages should be helpful
+- Use existing config system (Viper)
+- Use existing logging (Zerolog)
+- Follow existing patterns in cmd/kinen/
+- Sessions are just directories + markdown files
+- This is mostly file operations, no complex logic
 
-Good luck! 🚀
+## Questions & Blockers
 
+**Use beads to communicate questions and blockers.** A coordinator will monitor and respond.
+
+### When Blocked
+
+```bash
+bd create "BLOCKED [2]: [describe what's blocking you]" \
+  -t task -p 0 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-sqc \
+  --notes "Context: [what you've tried, what you need]"
+```
+
+### When You Have a Question
+
+```bash
+bd create "QUESTION [2]: [your question]" \
+  -t task -p 1 \
+  --assignee coordinator \
+  --deps discovered-from:kinen-sqc \
+  --notes "Options I'm considering: [A, B, C]"
+```
+
+### Best Practices
+
+1. **Be specific** — Include file paths, error messages, code snippets
+2. **Show your work** — What did you try? What did you learn?
+3. **Propose options** — Don't just ask "what should I do?" — propose 2-3 options
+4. **Link to track** — Always use `--assignee coordinator \
+  --deps discovered-from:kinen-sqc` (Track 2 epic)
+
+Expect response within 1-2 hours during active development.
