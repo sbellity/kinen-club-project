@@ -13,6 +13,7 @@ tags:
   - status/seed
   - topic/coordination
   - topic/multi-agent
+  - topic/context-drift
 kinen_round: 1
 kinen_status: seed
 summary: "Establish foundation for autonomous multi-agent coordination system"
@@ -39,6 +40,7 @@ N/A - This is the foundation round.
 - Establish vision for autonomous agent execution
 - Identify minimum viable coordination protocol
 - Define authority boundaries for agents vs. human
+- **Explore context drift and loss** (even within single agent conversations)
 - Set success criteria for measuring improvement
 
 ---
@@ -434,6 +436,57 @@ N/A - This is the foundation round.
 
 ---
 
+### Q1.11: How Do We Address Context Drift and Loss?
+
+**Context**: Even within a single agent conversation, context degrades over time. This session demonstrated the problem directly: the agent (me) had access to the kinen methodology, knew we'd refined the round format over 24 hours, but still generated a round in the wrong format on first attempt.
+
+**Observed Failure Modes**:
+1. **Intra-conversation drift**: Agent "knows" something early in conversation but fails to apply it later
+2. **Cross-session loss**: Agent in new session doesn't have context from previous sessions
+3. **Methodology adherence**: Agent has access to methodology but doesn't actively consult it
+4. **Format divergence**: Agent generates output that doesn't match established patterns
+
+- [ ] **Option A: Active context refresh**
+  - Agent explicitly re-reads key documents before generating outputs
+  - "Before generating round, read methodology.md"
+  - **Pros**: Simple, immediate, catches drift
+  - **Cons**: Token overhead, relies on agent discipline
+
+- [ ] **Option B: Validation gates**
+  - Automated checks that outputs match expected formats
+  - Reject non-compliant outputs, require regeneration
+  - **Pros**: Enforced compliance, catches errors
+  - **Cons**: Adds latency, may be frustrating
+
+- [ ] **Option C: Context in system prompt**
+  - Critical context (methodology, formats, decisions) embedded in system prompt
+  - Always present, not just available as tool
+  - **Pros**: Guaranteed presence, no tool call needed
+  - **Cons**: Token limit pressure, static (can't update mid-conversation)
+
+- [ ] **Option D: Semantic memory retrieval**
+  - Agent queries kinen index for relevant context before acting
+  - "What's the round format?" → retrieves methodology
+  - **Pros**: Dynamic, scalable, learns what's relevant
+  - **Cons**: Depends on good retrieval, adds latency
+
+- [ ] **Option E: Checklists and templates**
+  - Provide explicit templates that agents fill in
+  - Checklist of required elements before submission
+  - **Pros**: Structural guidance, hard to miss elements
+  - **Cons**: May feel mechanical, less flexible
+
+**Questions**:
+1. Why do you think I failed to apply the methodology I helped create?
+2. Is this fundamentally a retrieval problem, an attention problem, or a discipline problem?
+3. Should compliance be enforced (Option B) or enabled (Options A, C, D)?
+4. How much context should be "always present" vs. "retrievable on demand"?
+
+> [!note] Answer
+>
+
+---
+
 ## Summary
 
 This foundation establishes:
@@ -441,7 +494,8 @@ This foundation establishes:
 1. **The problem**: Human coordination as bottleneck (~62% of session time)
 2. **Key decisions needed**: Authority delegation, communication protocol, MVP scope
 3. **Specific pain points**: Blocking questions, workspace fragmentation, handover quality, context loss
-4. **Success criteria**: <10 human messages, <30 min blocking, 100% template compliance
+4. **Meta-problem**: Context drift even within single agent conversations (demonstrated live)
+5. **Success criteria**: <10 human messages, <30 min blocking, 100% template compliance
 
 **Pre-Session Materials**:
 - `artifacts/technical-spec.md` - Protocol design draft with beads extensions
