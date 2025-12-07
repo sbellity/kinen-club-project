@@ -495,7 +495,8 @@ This foundation establishes:
 2. **Key decisions needed**: Authority delegation, communication protocol, MVP scope
 3. **Specific pain points**: Blocking questions, workspace fragmentation, handover quality, context loss
 4. **Meta-problem**: Context drift even within single agent conversations (demonstrated live)
-5. **Success criteria**: <10 human messages, <30 min blocking, 100% template compliance
+5. **Research area**: Active context management and information density (see `artifacts/research-context-management.md`)
+6. **Success criteria**: <10 human messages, <30 min blocking, 100% template compliance
 
 **Pre-Session Materials**:
 - `artifacts/technical-spec.md` - Protocol design draft with beads extensions
