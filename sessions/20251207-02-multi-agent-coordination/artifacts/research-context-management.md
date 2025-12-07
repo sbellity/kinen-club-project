@@ -213,12 +213,129 @@ Round frontmatter: artifact_type, date, session, round_number, tags (YAML, --- d
 3. **Compression quality**: Can we compress methodology 50% without losing compliance?
 4. **Retrieval latency**: How much does on-demand retrieval slow generation?
 
+## Application: Agent Flock Context Optimization
+
+### The Vision
+
+Use kinen's LightMem infrastructure as **shared memory for agent flocks**:
+
+```
+                    ┌─────────────────────┐
+                    │   Kinen Memory      │
+                    │   (Shared Brain)    │
+                    │                     │
+                    │ • Project context   │
+                    │ • Decisions made    │
+                    │ • Discoveries       │
+                    │ • Active tasks      │
+                    └──────────┬──────────┘
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+        ▼                      ▼                      ▼
+   ┌─────────┐           ┌─────────┐           ┌─────────┐
+   │ Agent 1 │           │ Agent 2 │           │ Agent 3 │
+   │         │           │         │           │         │
+   │ Context │           │ Context │           │ Context │
+   │ Window  │           │ Window  │           │ Window  │
+   │ (optimized)         │ (optimized)         │ (optimized)
+   └─────────┘           └─────────┘           └─────────┘
+```
+
+### What Each Agent Needs
+
+Not all agents need the same context. For a project:
+
+| Agent Role | Needs in Context | Can Retrieve on Demand |
+|------------|------------------|------------------------|
+| Parser Agent | Parser interfaces, test patterns | Full architecture |
+| Storage Agent | Storage interfaces, DB schema | Parser details |
+| CLI Agent | Command patterns, user flows | Internal implementation |
+| Coordinator | All track status, decisions | Implementation details |
+
+### How Kinen Memory Helps
+
+**1. Project Context Storage**
+- Architecture decisions → Long-term memory
+- Current track status → Short-term buffer
+- Active task details → Sensory buffer (per agent)
+
+**2. Context Optimization per Agent**
+- Each agent queries kinen for their relevant context
+- Kinen returns **compressed, relevant** information
+- Agent's context window is optimized, not cluttered
+
+**3. Cross-Agent Discovery Propagation**
+- Agent 1 discovers something relevant to Agent 2
+- Writes to kinen memory with tags/relevance
+- Agent 2's next context refresh includes discovery
+
+**4. Consolidation Across Agents**
+- Multiple agents make similar observations
+- Sleep-time consolidation merges them
+- Unified understanding emerges
+
+### Implementation Sketch
+
+```go
+// Each agent starts with context injection
+func (a *Agent) Start(ctx context.Context, task Task) error {
+    // Get optimized context for this agent's role and task
+    context, err := a.kinen.GetOptimizedContext(OptimizeRequest{
+        Role:       a.role,
+        Task:       task,
+        MaxTokens:  4000,  // Leave room for task
+        MustInclude: []string{"methodology", "current-decisions"},
+    })
+    
+    // Context is compressed, relevant, and prioritized
+    a.injectContext(context)
+    
+    // Work on task...
+}
+
+// During work, agent writes discoveries
+func (a *Agent) RecordDiscovery(finding string, relevantTo []string) {
+    a.kinen.AddMemory(MemoryEntry{
+        Type:       "discovery",
+        Content:    finding,
+        Source:     a.id,
+        RelevantTo: relevantTo,  // Other agents/tracks
+        Importance: HIGH,
+    })
+}
+
+// Coordinator can query across all agents
+func (c *Coordinator) GetFlockStatus() FlockStatus {
+    return c.kinen.Query(QueryRequest{
+        Types:     []string{"discovery", "blocker", "completion"},
+        TimeRange: "last_hour",
+        GroupBy:   "agent",
+    })
+}
+```
+
+### Key Benefits
+
+1. **No more context loss**: Important info persists in kinen, not just conversation
+2. **Optimized per agent**: Each agent gets what they need, compressed
+3. **Cross-pollination**: Discoveries flow between agents automatically
+4. **Audit trail**: All agent observations stored, searchable
+
+### Research Questions
+
+1. How do we score "relevance to agent role"?
+2. What's the right compression ratio for project context?
+3. How often should agents refresh from kinen?
+4. Should kinen push updates or agents pull?
+
 ## Open Questions
 
 - Is this a model problem (attention) or a system problem (context management)?
 - Should the LLM manage its own context or should external systems?
 - What's the right abstraction for "importance"?
 - How do we evaluate "information retained" vs. "tokens used"?
+- **NEW**: Can kinen serve as shared memory for agent flocks?
 
 ## Related Work
 
