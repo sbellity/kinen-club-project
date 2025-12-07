@@ -45,33 +45,104 @@ LLM context windows are finite. As conversations grow or agents work on complex 
    - Periodic refresh/re-injection?
    - Hierarchical memory tiers?
 
-## Prior Art to Research
+## What Kinen Already Has: LightMem-Inspired Memory System
+
+**Important**: kinen-go already implements a sophisticated memory system (~85% parity with LightMem paper).
+
+### Three-Stage Architecture (Already Implemented)
+
+```
+┌─────────────────┐
+│ Sensory Buffer  │  ← Raw messages, windowed by token count (512 tokens)
+│ + Compression   │  ← Optional LLMLingua-2 style pre-compression
+│ + Segmentation  │  ← Coarse boundaries + fine-grained similarity
+├─────────────────┤
+│ Short-term      │  ← Accumulates topic segments (1024 tokens)
+│ Buffer          │  ← Triggers extraction at threshold
+├─────────────────┤
+│ Long-term       │  ← Vector DB with semantic indexing
+│ Memory          │  ← Sleep-time offline updates (consolidation, dedup)
+└─────────────────┘
+```
+
+### Key Capabilities Already Built
+
+- **Pre-compression**: Reduce tokens before processing
+- **Topic segmentation**: Coarse + fine-grained chunking
+- **Knowledge extraction**: LLM-based fact extraction
+- **Sleep-time updates**: Offline consolidation, deduplication, abstraction
+- **Vector retrieval**: Semantic search for relevant memories
+
+### The Gap: Active Context vs. Long-Term Memory
+
+The existing system handles **long-term memory storage and retrieval**. 
+
+The problem we observed is **active context curation during a conversation**:
+- Methodology was "available" (could be retrieved) but not "active" (in working context)
+- No mechanism to **promote** important retrievable info into active context
+- No mechanism to **protect** critical active context from being pushed out
+
+**Question**: Can the existing LightMem architecture be extended for active context management, or is this a separate concern?
+
+## Additional Prior Art
 
 ### MemGPT
 - Virtual context management for LLMs
 - Paging system inspired by OS memory management
 - Main context + archival storage + recall storage
-- Paper: "MemGPT: Towards LLMs as Operating Systems" (2023)
+- **Relevance**: Explicit context management, not just storage
 
 ### Context Distillation
 - Compress long contexts into shorter "distilled" versions
 - Train models to work with compressed representations
-- Trade-off: compression ratio vs. information loss
-
-### Hierarchical Memory
-- Different tiers: working memory, episodic, semantic
-- Consolidation between tiers (like human memory)
-- Kinen already has this concept in memory consolidation
+- **Relevance**: Information density optimization
 
 ### RAG (Retrieval Augmented Generation)
 - Don't keep everything in context—retrieve when needed
-- Challenge: knowing what to retrieve and when
-- Latency vs. context size trade-off
+- **Gap**: RAG retrieves, but doesn't manage what's already in context
 
-### Attention Mechanisms
-- Not all context tokens are equally important
-- Sparse attention, sliding window attention
-- Could inform what to keep vs. evict
+## Bridging LightMem to Active Context Management
+
+### The Architectural Question
+
+LightMem handles: **Conversation → Storage → Retrieval**
+Active context needs: **Context Window → Curation → Eviction/Promotion**
+
+These could be:
+1. **Same system, different mode**: LightMem's buffers could manage active context
+2. **Parallel systems**: Separate active context manager alongside LightMem
+3. **Extension**: Add "working memory" tier above sensory buffer
+
+### Potential Integration Points
+
+**Sensory Buffer as Context Manager**:
+- Already has token-based windowing (512 tokens)
+- Could be extended with importance scoring
+- Eviction policy could consider importance, not just age
+
+**Short-Term Buffer for Active Context**:
+- 1024 token threshold could be "active context budget"
+- Extraction could be "compression for context retention"
+- Instead of sending to long-term, keeps compressed in active
+
+**Retrieval → Promotion**:
+- When retrieving from long-term, promote to active context
+- Track "last retrieved" to identify frequently-needed memories
+- Auto-inject high-frequency retrievals into active context
+
+### Key Design Question
+
+> Should active context management be a new component, or an evolution of the existing buffer system?
+
+**Option A**: New "Working Memory" component
+- Separate from LightMem pipeline
+- Manages LLM context window explicitly
+- Interfaces with LightMem for retrieval
+
+**Option B**: Evolve buffers for dual-purpose
+- Sensory/Short-term buffers also serve as context managers
+- Add importance scoring to existing eviction logic
+- Unified architecture
 
 ## Potential Approaches for Kinen
 
