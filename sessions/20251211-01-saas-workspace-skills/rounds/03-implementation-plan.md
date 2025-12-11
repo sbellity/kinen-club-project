@@ -937,62 +937,101 @@ associations:
 
 #### DataHub Views
 
+DataHub views use **queryengine predicates** (not Malloy) with column selection.
+
 ```yaml
 # bundle/datahub/views/saas-views.yaml
-# Pre-built views for common SaaS queries
+# Pre-built views for common SaaS filtering
 
 views:
-  - name: company_health_summary
-    description: "Company health metrics for SaaS analysis"
-    base_model: crm.company
-    query: |
-      select:
-        name,
-        attributes.customerStatus,
-        subscription.plan,
-        subscription.mrr,
-        contact_count is contacts.count(),
-        active_users_7d is contacts.count() { 
-          where: EXISTS(user_login WHERE timestamp > now - 7 day) 
-        },
-        last_login is MAX(contacts.user_login.timestamp),
-        open_tickets is tickets.count() { where: status = 'open' }
-      where: subscription.status = 'active'
-      order_by: mrr desc
-    use_case: "Customer health dashboard"
+  - name: active_customers_view
+    model_id: crm.company
+    doc:
+      name: "Active Customers"
+      description: "Companies with active subscriptions - filtered view for customer analysis"
+    query:
+      # Queryengine predicate format (serialized JSON)
+      type: "relatedEntity"
+      entityType: "subscription"
+      predicate:
+        type: "attribute"
+        attribute: "status"
+        operator: "equals"
+        value: "active"
+    displayed_columns:
+      - "attributes.name"
+      - "attributes.industry"
+      - "attributes.employees"
+      - "createdAt"
+    sort_by: "createdAt"
+    sort_order: "desc"
+    use_case: "Filter to active customers for analysis"
     
-  - name: engagement_trends
-    description: "Weekly engagement trends by company"
-    base_model: crm.company
-    query: |
-      group_by: 
-        week is WEEK(user_login.timestamp)
-      aggregate:
-        companies_active is count(distinct companyId),
-        total_logins is count(),
-        avg_logins_per_company is count() / count(distinct companyId)
-      order_by: week desc
-      limit: 12
-    use_case: "Engagement trend analysis"
+  - name: churned_customers_view
+    model_id: crm.company
+    doc:
+      name: "Churned Customers"
+      description: "Companies with cancelled subscriptions - for win-back analysis"
+    query:
+      type: "relatedEntity"
+      entityType: "subscription"
+      predicate:
+        type: "attribute"
+        attribute: "status"
+        operator: "equals"
+        value: "cancelled"
+    displayed_columns:
+      - "attributes.name"
+      - "attributes.industry"
+      - "createdAt"
+    sort_by: "createdAt"
+    sort_order: "desc"
+    use_case: "Filter to churned customers for win-back"
     
-  - name: churn_risk_signals
-    description: "Companies showing churn risk signals"
-    base_model: crm.company
-    query: |
-      select:
-        name,
-        subscription.mrr,
-        days_since_login is DATEDIFF(NOW(), MAX(contacts.user_login.timestamp)),
-        churn_page_visits is contacts.web_metrics.count() {
-          where: pagePath ~ 'cancel|downgrade'
-        },
-        open_tickets is tickets.count() { where: status = 'open' }
-      where: 
-        subscription.status = 'active'
-        AND (days_since_login > 14 OR churn_page_visits > 0 OR open_tickets > 2)
-      order_by: mrr desc
-    use_case: "Proactive churn prevention"
+  - name: enterprise_companies_view
+    model_id: crm.company
+    doc:
+      name: "Enterprise Companies"
+      description: "Large companies (500+ employees) - for enterprise analysis"
+    query:
+      type: "attribute"
+      attribute: "attributes.employees"
+      operator: "greaterThan"
+      value: 500
+    displayed_columns:
+      - "attributes.name"
+      - "attributes.employees"
+      - "attributes.industry"
+      - "createdAt"
+    sort_by: "attributes.employees"
+    sort_order: "desc"
+    use_case: "Filter to enterprise-size companies"
+    note: "Workaround until ACV field is available"
+
+  - name: recent_contacts_view
+    model_id: crm.contact
+    doc:
+      name: "Recent Contacts (30d)"
+      description: "Contacts created in last 30 days"
+    query:
+      type: "attribute"
+      attribute: "createdAt"
+      operator: "greaterThan"
+      value: "@now-30d"  # Relative date
+    displayed_columns:
+      - "attributes.emailaddress"
+      - "attributes.firstname"
+      - "attributes.lastname"
+      - "createdAt"
+    sort_by: "createdAt"
+    sort_order: "desc"
+    use_case: "Recent contact acquisition analysis"
 ```
+
+**Note**: DataHub views are saved filters with column selection, NOT Malloy queries. For complex analytics (aggregations, joins, trends), use:
+- **Malloy queries** via `datahub_explorer_run_query` for ad-hoc analysis
+- **Audiences** for segment-based filtering
+- **Dashboards** (if available) for visualizations
 
 ### Knowledge Base Articles
 
@@ -1517,11 +1556,21 @@ some segments can be created.
 | Type | Format | Count | Deployment |
 |------|--------|-------|------------|
 | **Audiences** | JSON | 12+ | Auto via API |
-| **DataHub Views** | YAML | 3 | Auto via API |
+| **DataHub Views** | JSON | 3-4 | Auto via API |
 | **Knowledge Base** | Markdown | 5 | Auto via API |
 | **Associations** | YAML | 1-2 | Review + create |
 | **Computed Fields** | YAML | 2-3 | Manual setup |
 | **Action Guides** | Markdown | 2 | Reference only |
+
+### DataHub Views vs Audiences vs Malloy
+
+| Resource | What It Does | Use For |
+|----------|--------------|---------|
+| **Audiences** | Segment contacts/companies with predicates | Campaign targeting, lifecycle segments |
+| **DataHub Views** | Saved filter + columns on a model | Quick filtered browsing, data exploration |
+| **Malloy Queries** | Complex analytics (aggregations, joins) | Ad-hoc analysis, dashboards, metrics |
+
+DataHub views are **saved filters**, not analytics queries. They use queryengine predicates (same as audiences) but apply to browsing a model's records.
 
 ### Knowledge Base Articles
 
