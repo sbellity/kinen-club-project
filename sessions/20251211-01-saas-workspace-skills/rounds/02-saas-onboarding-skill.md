@@ -1,8 +1,434 @@
 # Round 02: SaaS Data Onboarding Skill
 
-## The Big Insight: Building a Semantic Layer on DataHub
+## The Big Insight: A SaaS Semantic Package
 
-**What we're really building is a semantic layer.**
+**We're building a vertical-specific semantic layer that sits on TOP of Bird's platform semantics.**
+
+Bird already provides semantic data catalogs:
+- `bird:crm` → Contacts, companies, lists
+- `bird:web` → Page views, sessions, visitors  
+- `bird:messaging` → Email opens, clicks, deliveries
+
+These are **platform semantics** — generic, horizontal, applicable to any business.
+
+What's missing is **vertical semantics** — SaaS-specific concepts derived from combining platform data with customer's custom data:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      THE SAAS SEMANTIC PACKAGE                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  LAYER 4: BUSINESS QUESTIONS                                        │   │
+│  │  ───────────────────────────────                                    │   │
+│  │  "Churned enterprise customers who were power users"                │   │
+│  │  "Trial users most likely to convert"                               │   │
+│  │  "At-risk accounts by revenue tier"                                 │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                              ▲                                              │
+│                              │ Compose                                      │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  LAYER 3: SAAS VERTICAL SEMANTICS                        ◄── WE    │   │
+│  │  ────────────────────────────────                            BUILD │   │
+│  │                                                              THIS  │   │
+│  │  LIFECYCLE        ENGAGEMENT         INTENT          VALUE         │   │
+│  │  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐     │   │
+│  │  │ Customer │    │  Active  │    │ Purchase │    │Enterprise│     │   │
+│  │  │  Status  │    │  Users   │    │  Intent  │    │ Accounts │     │   │
+│  │  └──────────┘    └──────────┘    └──────────┘    └──────────┘     │   │
+│  │  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐     │   │
+│  │  │ Churned  │    │  Power   │    │  Churn   │    │High Value│     │   │
+│  │  │Customers │    │  Users   │    │  Risk    │    │ Accounts │     │   │
+│  │  └──────────┘    └──────────┘    └──────────┘    └──────────┘     │   │
+│  │                                                                    │   │
+│  │  Tailored to THIS customer's business model and data              │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                              ▲                                              │
+│                              │ Enriches + Derives from                      │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  LAYER 2: BIRD PLATFORM SEMANTICS (Pre-built)                       │   │
+│  │  ────────────────────────────────────────────                       │   │
+│  │                                                                     │   │
+│  │  bird:crm          bird:web           bird:messaging                │   │
+│  │  ┌──────────┐     ┌──────────┐       ┌──────────┐                  │   │
+│  │  │ Contacts │     │Page Views│       │Email Open│                  │   │
+│  │  │Companies │     │ Sessions │       │  Clicks  │                  │   │
+│  │  │  Lists   │     │ Visitors │       │ Delivery │                  │   │
+│  │  └──────────┘     └──────────┘       └──────────┘                  │   │
+│  │                                                                     │   │
+│  │  Generic, horizontal, works for any business                       │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                              ▲                                              │
+│                              │ Built on                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  LAYER 1: CUSTOMER'S RAW DATA                                       │   │
+│  │  ────────────────────────────                                       │   │
+│  │                                                                     │   │
+│  │  ws:default (Custom Objects & Events)                               │   │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │   │
+│  │  │ subscription │  │   invoice    │  │  user-login  │              │   │
+│  │  │    (obj)     │  │    (obj)     │  │   (event)    │              │   │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘              │   │
+│  │                                                                     │   │
+│  │  Business-specific, uninterpreted, needs semantic mapping          │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### What the SaaS Semantic Package Does
+
+| Action | Example |
+|--------|---------|
+| **Leverage existing** | Use `bird:web` page views to detect "Pricing Page Visitors" |
+| **Add intelligence** | Compute engagement scores from login frequency |
+| **Derive relationships** | Link `subscription` → `company` if not already associated |
+| **Identify gaps** | "You have subscriptions but no `churnedAt` field" |
+| **Recommend new objects** | "Create a `health_score` computed field on company" |
+| **Build segments** | Create actual Bird audiences as reusable building blocks |
+
+### The Three Outputs
+
+1. **Segment Catalog** — Named, documented, composable building blocks
+2. **Data Recommendations** — Fields, associations, objects to add
+3. **Semantic Documentation** — What your data means in SaaS terms
+
+---
+
+## SaaS Semantic Package: Complete Reference
+
+The package defines **standard SaaS concepts** that get mapped to each customer's actual data.
+
+### Domain 1: Customer Lifecycle
+
+The foundation of SaaS — who are your customers and what's their status?
+
+```yaml
+lifecycle_concepts:
+  
+  # Status Segments
+  prospects:
+    description: "Contacts/companies not yet customers"
+    standard_definition: "No active subscription, no past subscription"
+    data_requirements:
+      - subscription object OR customerStatus field on company
+    variations:
+      - "Known prospects" (have contact info)
+      - "Anonymous prospects" (web visitors only)
+      
+  trial_users:
+    description: "Currently in trial period"
+    standard_definition: "subscription.status = 'trial' AND trialEndsAt > now"
+    data_requirements:
+      - subscription.status with 'trial' value
+      - OR company.trialEndsAt field
+    derived_metrics:
+      - days_remaining: "trialEndsAt - now"
+      - trial_engagement: "logins during trial / trial_days"
+      
+  active_customers:
+    description: "Currently paying customers"
+    standard_definition: "subscription.status = 'active'"
+    data_requirements:
+      - subscription object with status field
+      - OR company.customerStatus = 'customer'
+    variations:
+      - "New customers" (< 90 days)
+      - "Established customers" (> 90 days)
+      - "Long-term customers" (> 1 year)
+      
+  churned_customers:
+    description: "Former customers who cancelled"
+    standard_definition: "subscription.status = 'cancelled' AND churnedAt is not null"
+    data_requirements:
+      - subscription.status = 'cancelled'
+      - OR company.churnedAt timestamp
+    derived_metrics:
+      - tenure_before_churn: "churnedAt - becameCustomerAt"
+      - days_since_churn: "now - churnedAt"
+    variations:
+      - "Recently churned" (< 90 days) — win-back targets
+      - "Long-term churned" (> 1 year) — re-acquisition
+      
+  paused_customers:
+    description: "Temporarily paused subscription"
+    standard_definition: "subscription.status = 'paused'"
+    data_requirements:
+      - subscription.status with 'paused' value
+```
+
+### Domain 2: Engagement & Usage
+
+How are customers using the product?
+
+```yaml
+engagement_concepts:
+
+  # User Activity Segments
+  active_users:
+    description: "Users who logged in recently"
+    standard_definition: "login event in last N days"
+    data_requirements:
+      - Login/session event with contact linkage
+    time_windows:
+      - DAU: "login in last 1 day"
+      - WAU: "login in last 7 days"
+      - MAU: "login in last 30 days"
+    derived_from:
+      platform: "custom-event.user-login OR bird:web sessions"
+      
+  power_users:
+    description: "Highly engaged users"
+    standard_definition: "N+ logins in 30 days OR N+ feature actions"
+    data_requirements:
+      - Login events
+      - Optionally: feature usage events
+    thresholds:
+      default: "10+ logins/30 days"
+      custom: "Ask user for their definition"
+    business_value: "Expansion targets, advocates, churn canaries"
+    
+  dormant_users:
+    description: "Users who stopped engaging"
+    standard_definition: "Was active but no login in N days"
+    data_requirements:
+      - Login event history
+    calculation: "Had login 30-90 days ago, no login in last 30 days"
+    business_value: "Re-engagement campaigns"
+    
+  declining_engagement:
+    description: "Users whose activity is trending down"
+    standard_definition: "Activity this period < activity last period"
+    data_requirements:
+      - Login events with timestamps
+    calculation: |
+      logins_last_30d < logins_previous_30d * 0.5
+      (>50% drop in activity)
+    business_value: "Early churn signal — proactive intervention"
+    complexity: "advanced — requires period comparison"
+    
+  # Feature Adoption
+  feature_adopters:
+    description: "Users who used specific features"
+    standard_definition: "Feature usage event for feature X"
+    data_requirements:
+      - Feature usage events
+      - Feature name/ID in event payload
+    dynamic: true  # Creates segment per feature
+    examples:
+      - "Used Reporting feature"
+      - "Used API integration"
+      - "Used Team collaboration"
+```
+
+### Domain 3: Intent Signals
+
+What are users thinking about doing?
+
+```yaml
+intent_concepts:
+
+  # Purchase Intent
+  purchase_intent:
+    description: "Showing signals of wanting to buy/upgrade"
+    data_sources:
+      web_behavior:
+        - pricing_page_view: "pagePath contains 'pricing'"
+        - upgrade_page_view: "pagePath contains 'upgrade'"
+        - checkout_started: "pagePath contains 'checkout'"
+      product_behavior:
+        - plan_comparison: "Viewed plan comparison in-app"
+        - billing_page: "Visited billing settings"
+    composite_signal: "Any of above in last 7 days"
+    business_value: "Sales outreach, conversion campaigns"
+    
+  expansion_intent:
+    description: "Current customers ready to upgrade"
+    data_sources:
+      usage_signals:
+        - hitting_limits: "usage > 80% of plan limit"
+        - feature_gating: "attempted blocked feature"
+      behavioral_signals:
+        - enterprise_pages: "Viewed enterprise/security pages"
+        - pricing_revisit: "Customer viewing pricing again"
+    business_value: "Upsell campaigns, CSM alerts"
+    
+  churn_intent:
+    description: "Signals of wanting to leave"
+    data_sources:
+      explicit:
+        - cancel_page: "pagePath contains 'cancel'"
+        - downgrade_page: "pagePath contains 'downgrade'"
+      implicit:
+        - competitor_research: "pagePath contains 'vs' or 'alternative'"
+        - support_frustration: "Multiple support tickets + declining usage"
+    business_value: "URGENT — retention intervention"
+    priority: "critical"
+```
+
+### Domain 4: Value Segmentation
+
+How valuable are customers?
+
+```yaml
+value_concepts:
+
+  # Revenue Tiers
+  enterprise_customers:
+    description: "High-value accounts"
+    definitions:
+      by_acv: "ACV > $X (customer-defined threshold)"
+      by_plan: "plan = 'enterprise'"
+      by_employees: "company.employees > 500"
+    data_requirements:
+      - subscription.mrr/acv OR company.acv
+      - OR subscription.plan with enterprise tier
+      - OR company.employees
+    ask_user: "How do you define 'enterprise'?"
+    
+  smb_customers:
+    description: "Small/medium business accounts"
+    definitions:
+      by_acv: "ACV < $X"
+      by_plan: "plan in ('starter', 'pro')"
+    
+  high_value_churned:
+    description: "Enterprise customers who churned"
+    composition: "Churned Customers ∩ Enterprise Customers"
+    business_value: "Priority win-back targets"
+    
+  # Potential Value
+  high_potential_trials:
+    description: "Trial users likely to become high-value"
+    signals:
+      - company_size: "company.employees > 100"
+      - engagement: "Power user during trial"
+      - intent: "Viewed enterprise pages"
+    business_value: "Sales prioritization"
+```
+
+### Domain 5: Reachability
+
+Can we actually contact them?
+
+```yaml
+reachability_concepts:
+
+  email_reachable:
+    description: "Contacts we can email"
+    data_requirements:
+      - contact.identifiers.emailaddress exists
+      - Not hard bounced
+      - Not unsubscribed (for marketing)
+    derived_from: "bird:messaging delivery data"
+    
+  sms_reachable:
+    description: "Contacts we can SMS"
+    data_requirements:
+      - contact.identifiers.phonenumber exists
+      - SMS consent (if required)
+    
+  push_reachable:
+    description: "Contacts with push enabled"
+    data_requirements:
+      - Push token registered
+      - Not opted out
+      
+  multi_channel_reachable:
+    description: "Reachable on 2+ channels"
+    composition: "(Email OR SMS) AND (Push OR WhatsApp)"
+    business_value: "Reliable communication targets"
+    
+  unreachable:
+    description: "No valid contact method"
+    definition: "NOT (email_reachable OR sms_reachable)"
+    action: "Data enrichment needed"
+```
+
+### Domain 6: Behavioral Patterns (from Web/App)
+
+Derived from page views and events:
+
+```yaml
+behavioral_patterns:
+
+  # Content Consumption
+  documentation_engaged:
+    description: "Reading docs/help content"
+    source: "bird:web page views"
+    pattern: "pagePath contains '/docs' OR '/help' OR '/guide'"
+    interpretation: "Learning product — onboarding signal"
+    
+  blog_readers:
+    description: "Consuming blog content"
+    pattern: "pagePath contains '/blog'"
+    interpretation: "Top of funnel — nurture targets"
+    
+  # Product Journey
+  onboarding_flow:
+    description: "In getting-started experience"
+    pattern: "pagePath contains '/getting-started' OR '/onboarding'"
+    interpretation: "Critical phase — ensure completion"
+    
+  settings_activity:
+    description: "Managing account settings"
+    pattern: "pagePath contains '/settings' OR '/account'"
+    interpretation: "Established user behavior"
+    
+  # Custom Patterns (detected)
+  custom_patterns:
+    description: "Patterns specific to this customer's site"
+    detection: "Analyze URL structure, find clusters"
+    examples:
+      - "/workspace/*" → "Product workspace activity"
+      - "/admin/*" → "Admin user behavior"
+      - "/reports/*" → "Analytics feature usage"
+    action: "Ask user to classify detected patterns"
+```
+
+### Semantic Package Delivery
+
+What the skill produces:
+
+```yaml
+deliverables:
+
+  segment_catalog:
+    format: "Bird Audiences"
+    contents:
+      - Named segments for each implemented concept
+      - Documentation in audience description
+      - Predicate definitions
+    organization:
+      - Folder: "SaaS Semantic Layer"
+      - Subfolders: "Lifecycle", "Engagement", "Intent", "Value", "Reachability"
+      
+  data_gap_report:
+    format: "Markdown document"
+    contents:
+      - Concepts that CAN be implemented now
+      - Concepts BLOCKED by missing data
+      - Specific recommendations per gap
+      - Priority order for filling gaps
+      
+  semantic_documentation:
+    format: "Markdown + YAML"
+    contents:
+      - Mapping of customer's data to SaaS concepts
+      - Field definitions and business meaning
+      - Segment composition rules
+      - Threshold definitions (what is "power user" for THIS customer)
+      
+  enrichment_recommendations:
+    format: "Actionable list"
+    contents:
+      - New fields to add (with exact specs)
+      - New associations to create
+      - New objects to define
+      - Data sources to connect
+```
+
+---
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
