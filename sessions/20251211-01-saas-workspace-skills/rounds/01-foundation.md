@@ -176,7 +176,120 @@ SEGMENT: At-Risk High-Value Customers
   AND reachable_email
 ```
 
-### 5. Account vs. Individual Perspective
+### 5. Identity Resolution Architecture
+
+**Reference**: [Bird Identity Resolution Guide](https://docs.bird.com/applications/audience/contacts/concepts/identity-resolution-guide)
+
+#### Contact Identifiers (crm.contact)
+
+The workspace has 4 configured identifiers for contacts:
+
+| Identifier Key | Type | Display Name | Field Path | Coverage |
+|----------------|------|--------------|------------|----------|
+| `id` | uuid | ID | id | 100% (system) |
+| `emailaddress` | emailaddress | Email Address | attributes.emailaddress | **18.1%** (229,863) |
+| `phonenumber` | phonenumber | Phone Number | attributes.phonenumber | **1.3%** (16,716) |
+| `userid` | uuid | Bird UserID | - | **0.6%** (7,239) |
+
+**Critical Finding**: Only 18% of contacts have the primary business identifier (email).
+
+#### Company Identifiers (crm.company)
+
+| Identifier Key | Type | Display Name | Field Path |
+|----------------|------|--------------|------------|
+| `id` | uuid | ID | id |
+| `domain` | domain | Domain | - |
+| `external_id` | text | External ID | - |
+| `customer_id` | text | Customer ID | attributes.customerId |
+
+#### Identity Resolution Strategies
+
+Bird supports 3 resolution strategies when upserting contacts:
+
+| Strategy | Behavior | Best For |
+|----------|----------|----------|
+| **`strict`** | All identifiers must match ONE contact. Fails if conflict. | High-quality data, validation |
+| **`first_alias`** | Use first identifier to find contact, add others as aliases | Progressive collection |
+| **`first`** | Use first identifier only, ignore others | Attribute-only updates |
+
+**Current Workspace Pattern**: Based on `initialSource` distribution:
+
+| Source | Count | Likely Strategy |
+|--------|-------|-----------------|
+| unknown | 1,053,057 (83%) | Anonymous web tracking |
+| import | 121,078 (9.5%) | Bulk import (likely `strict`) |
+| connectors | 67,920 (5.3%) | CRM sync (likely `first_alias`) |
+| api | 13,122 (1%) | App integration |
+| payments | 12,648 (1%) | Payment system |
+
+#### Anonymous → Identified Journey
+
+The Bird identity model supports progressive identification:
+
+```
+Step 1: Anonymous visit
+┌─────────────────────────────────────────┐
+│ Contact created with:                   │
+│   - id: uuid (system generated)         │
+│   - isAnonymous: true                   │
+│   - initialSource: "unknown"            │
+│   - Web tracking cookie linked          │
+└─────────────────────────────────────────┘
+           │
+           ▼ User provides email (form, checkout, signup)
+┌─────────────────────────────────────────┐
+│ Identity Resolution:                    │
+│   - Strategy: first_alias               │
+│   - Find by: anonymous cookie           │
+│   - Add alias: emailaddress             │
+│   - Result: isAnonymous → false         │
+└─────────────────────────────────────────┘
+           │
+           ▼ User provides phone (checkout, verification)
+┌─────────────────────────────────────────┐
+│ Identity Resolution:                    │
+│   - Strategy: first_alias               │
+│   - Find by: emailaddress               │
+│   - Add alias: phonenumber              │
+│   - Result: Multi-channel reachable     │
+└─────────────────────────────────────────┘
+```
+
+#### Identifier Conflicts
+
+When an alias is already claimed by another contact:
+
+| Strategy | Behavior | Response |
+|----------|----------|----------|
+| `strict` | ❌ ERROR | Operation fails |
+| `first_alias` | ⚠️ Skip | `skippedAliases` in response |
+| `first` | N/A | Aliases not added |
+
+**Implication for Skills**: The `saas-identification-workflow` skill must:
+1. Use `first_alias` strategy for progressive enrichment
+2. Handle `skippedAliases` to detect potential duplicates
+3. Monitor skip rates to identify data quality issues
+
+#### Identifier Priority
+
+When using `first_alias` or `first`, identifier order matters:
+
+**Recommended priority** (high → low):
+1. 🥇 `userid` - App-specific, most reliable
+2. 🥈 `emailaddress` - Business identifier
+3. 🥉 `phonenumber` - Secondary channel
+4. 🔻 Anonymous cookie - Volatile
+
+#### Skills Implications
+
+| Skill | Identity Consideration |
+|-------|------------------------|
+| `saas-identification-workflow` | Design capture flows to add emailaddress identifier |
+| `saas-customer-lifecycle` | Only works for identified contacts (20%) |
+| `saas-segment-fragments` | Must filter `isAnonymous = false` for business segments |
+| `saas-reachability-analyzer` | Requires identifier to be set for channel reachability |
+
+### 6. Account vs. Individual Perspective
 
 **Question**: How to handle B2B (company) vs. B2C (individual) customer tracking?
 
@@ -436,50 +549,156 @@ MEETING TOUCHPOINTS (via calendars.*)
 
 ### Skill 13: saas-identification-workflow (NEW - PRIORITY)
 
-**Purpose**: Convert anonymous contacts to identified profiles.
+**Purpose**: Convert anonymous contacts to identified profiles using Bird's identity resolution.
 
-**Problem Statement**: 80% of contacts (1M+) are anonymous web visitors with no email, phone, or profile data. This blocks all downstream SaaS lifecycle analysis.
+**Problem Statement**: 80% of contacts (1M+) are anonymous web visitors. Only 18% have the primary business identifier (`emailaddress`). This blocks all downstream SaaS lifecycle analysis.
 
-**Available Signals for Anonymous Contacts**:
-- `initialSource`: unknown (83%), import (9.5%), connectors (5.3%)
-- Web tracking via `web_metrics` (561k events on app.bird.com + bird.com)
-- `createdAt` for recency
+**Identity Resolution Reference**: [Bird Identity Resolution Guide](https://docs.bird.com/applications/audience/contacts/concepts/identity-resolution-guide)
 
-**Identification Strategies**:
+#### Current Identifier Coverage
 
-1. **Progressive Profiling**
-   - Identify high-engagement anonymous visitors (web_metrics)
-   - Target with personalized capture forms
-   - Build segments: "anonymous + high web activity"
+| Identifier | Coverage | Gap |
+|------------|----------|-----|
+| `emailaddress` | 229,863 (18.1%) | 1,040,888 missing |
+| `phonenumber` | 16,716 (1.3%) | 1,254,035 missing |
+| `userid` (Bird app) | 7,239 (0.6%) | 1,263,512 missing |
+| `external_account_id` | 7,239 (0.6%) | - |
 
-2. **Source-Based Prioritization**
-   - Prioritize `connectors` source (5.3%) - likely from integrations
-   - Prioritize `payments` source (1%) - transactional context
-   - Deprioritize `unknown` source (83%)
+#### Resolution Strategy Recommendation
 
-3. **Recency Windows**
-   - Focus on recent anonymous (last 30d): high intent
-   - Archive old anonymous (>90d): low conversion potential
+Use **`first_alias`** strategy for progressive identification:
 
-**Workflow**:
-1. Segment anonymous contacts by source and recency
-2. Cross-reference with web_metrics for engagement signals
-3. Generate prioritized identification target list
-4. Create capture campaign segments
-5. Track conversion: anonymous → identified
+```json
+{
+  "strategy": "first_alias",
+  "identifiers": [
+    {"key": "anonymous_id", "value": "anon_xyz789"}
+  ],
+  "aliasIdentifiers": [
+    {"key": "emailaddress", "value": "user@example.com"}
+  ],
+  "attributes": {
+    "identificationSource": "signup_form",
+    "identifiedAt": "2025-12-11T15:00:00Z"
+  }
+}
+```
 
-**Output Artifact**: `identification-priority-segments.md`
+**Benefits**:
+- Preserves anonymous visitor journey
+- Adds email without failing if already claimed
+- Reports `skippedAliases` for duplicate detection
 
-**Predicates**:
+#### Identification Capture Methods
+
+| Method | Expected Conversion | Implementation |
+|--------|---------------------|----------------|
+| **Signup forms** | 15-25% of engaged | Web forms with email capture |
+| **Gated content** | 10-20% | Downloads requiring email |
+| **Newsletter** | 5-10% | Subscription prompts |
+| **Checkout** | 80%+ of purchasers | Transactional capture |
+| **Live chat** | 30-50% | Inbox identification |
+| **Social login** | 20-30% | OAuth integration |
+
+#### Target Segments
+
+**Segment 1: High-Intent Anonymous** (Priority: HIGH)
 ```json
 {
   "type": "and",
   "predicates": [
     { "type": "field", "field": "isAnonymous", "operator": "equals", "value": true },
-    { "type": "field", "field": "createdAt", "operator": "greaterThan", "value": "now - 30 days" }
+    { "type": "field", "field": "createdAt", "operator": "greaterThan", "value": "now - 7 days" },
+    { "type": "field", "field": "attributes.initialSource", "operator": "in", "value": ["web", "payments"] }
   ]
 }
 ```
+*Rationale*: Recent visitors from high-intent sources. Show personalized capture forms.
+
+**Segment 2: Connector-Sourced Anonymous** (Priority: MEDIUM)
+```json
+{
+  "type": "and",
+  "predicates": [
+    { "type": "field", "field": "isAnonymous", "operator": "equals", "value": true },
+    { "type": "field", "field": "attributes.initialSource", "operator": "equals", "value": "connectors" }
+  ]
+}
+```
+*Rationale*: 67,920 contacts from integrations. May have identifiers in source system.
+
+**Segment 3: Engaged Anonymous** (Priority: MEDIUM)
+- Cross-reference with `web_metrics` for page views > 3
+- Target with progressive profiling
+
+**Segment 4: Stale Anonymous** (Priority: LOW)
+```json
+{
+  "type": "and",
+  "predicates": [
+    { "type": "field", "field": "isAnonymous", "operator": "equals", "value": true },
+    { "type": "field", "field": "createdAt", "operator": "lessThan", "value": "now - 90 days" }
+  ]
+}
+```
+*Rationale*: Archive or suppress. Low conversion probability.
+
+#### Duplicate Detection
+
+Monitor `skippedAliases` response to identify potential duplicates:
+
+```json
+{
+  "addedAliases": [
+    {"key": "phonenumber", "value": "+15551234567"}
+  ],
+  "skippedAliases": [
+    {"key": "emailaddress", "value": "user@example.com"}
+  ]
+}
+```
+
+**Skip Rate Thresholds**:
+| Rate | Status | Action |
+|------|--------|--------|
+| <5% | Healthy | Normal operation |
+| 5-20% | Warning | Review for duplicates |
+| >20% | Alert | Data quality issue |
+
+#### Workflow
+
+1. **Audit Current State**
+   - Query identifier coverage percentages
+   - Segment anonymous by source and recency
+   
+2. **Design Capture Strategy**
+   - Map capture methods to segments
+   - Define expected conversion rates
+   
+3. **Create Target Segments**
+   - Build predicates for each priority tier
+   - Export for campaign targeting
+   
+4. **Monitor Resolution**
+   - Track `skippedAliases` rates
+   - Measure anonymous → identified conversion
+   - Alert on duplicate patterns
+
+5. **Iterate**
+   - Adjust capture forms based on conversion
+   - Expand to new identifier types (phone, userid)
+
+**Output Artifacts**:
+- `identification-audit.md` - Current identifier coverage
+- `identification-segments.yaml` - Target segment predicates
+- `identification-playbook.md` - Capture method recommendations
+
+**Success Metrics**:
+| Metric | Current | Target (30d) | Target (90d) |
+|--------|---------|--------------|--------------|
+| Email coverage | 18.1% | 25% | 35% |
+| Anonymous rate | 80.2% | 70% | 55% |
+| Skip rate | TBD | <10% | <5% |
 
 ### Skill 14: saas-workspace-readiness (NEW)
 
