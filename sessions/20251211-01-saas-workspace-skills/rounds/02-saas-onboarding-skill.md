@@ -1,5 +1,95 @@
 # Round 02: SaaS Data Onboarding Skill
 
+## The Big Insight: Building a Semantic Layer on DataHub
+
+**What we're really building is a semantic layer.**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           THE BIRD SEMANTIC LAYER                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  LAYER 3: BUSINESS QUESTIONS                                        │   │
+│  │  ───────────────────────────────                                    │   │
+│  │  "Who are my churned enterprise customers that were power users?"   │   │
+│  │  "Which trial users are most likely to convert?"                    │   │
+│  │  "Who should I target for win-back campaigns?"                      │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                              ▲                                              │
+│                              │ Composed from                                │
+│                              │                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  LAYER 2: SEMANTIC LAYER (Segments as Concepts)          ◄── WE    │   │
+│  │  ──────────────────────────────────────────────────────      BUILD │   │
+│  │                                                              THIS  │   │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐              │   │
+│  │  │ Churned  │ │Enterprise│ │  Power   │ │  Trial   │              │   │
+│  │  │Customers │ │Customers │ │  Users   │ │  Users   │              │   │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘              │   │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐              │   │
+│  │  │  Active  │ │ At Risk  │ │ Purchase │ │  Churn   │              │   │
+│  │  │  Users   │ │  Score   │ │  Intent  │ │  Intent  │              │   │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘              │   │
+│  │                                                                    │   │
+│  │  Each segment = A business concept with clear meaning              │   │
+│  │  Segments are composable: "Churned ∩ Enterprise ∩ Was Power User" │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                              ▲                                              │
+│                              │ Derived from                                 │
+│                              │                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  LAYER 1: DATAHUB (Raw Data)                                        │   │
+│  │  ───────────────────────────                                        │   │
+│  │                                                                     │   │
+│  │  Models:     crm.contact, crm.company, custom-object.subscription  │   │
+│  │  Events:     custom-event.login, web_page_view, email_opened       │   │
+│  │  Fields:     status, plan, mrr, createdAt, pagePath, timestamp     │   │
+│  │  Associations: contact → company, subscription → company           │   │
+│  │                                                                     │   │
+│  │  Raw, uninterpreted, requires domain knowledge to use              │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Why a Semantic Layer?
+
+| Without Semantic Layer | With Semantic Layer |
+|------------------------|---------------------|
+| User must understand data model | User thinks in business concepts |
+| Complex predicates for each query | Compose named segments |
+| Repeated logic across campaigns | Define once, reuse everywhere |
+| Tribal knowledge required | Self-documenting building blocks |
+| Hard to validate correctness | Each segment is testable |
+| "What does this query mean?" | "Churned ∩ Enterprise = obvious" |
+
+### The Skill's Mission
+
+**Transform raw DataHub data into a rich semantic layer of composable segments that encode SaaS business logic.**
+
+The skill doesn't just *analyze* data—it **builds understanding** by:
+
+1. **Discovering** what raw data exists (DataHub models, events, fields)
+2. **Interpreting** what it means (page paths → behaviors, events → engagement)
+3. **Proposing** semantic concepts (segments with business meaning)
+4. **Guiding** the user to fill gaps (missing fields, new data sources)
+5. **Creating** the building blocks (actual audience segments in Bird)
+6. **Enabling** complex queries through composition (not raw predicates)
+
+### Analogy: Like dbt for Customer Data
+
+| Data Warehouse World | Bird World |
+|---------------------|------------|
+| Raw tables | DataHub models |
+| dbt models / metrics | Audience segments |
+| dbt semantic layer | Segment catalog |
+| SQL queries | Predicate compositions |
+| Metrics definitions | Engagement scores, lifecycle stages |
+| Data tests | Segment validation |
+
+---
+
 ## Problem Statement
 
 When a SaaS company wants to run sophisticated campaigns like "contacts from churned high-value customers", they face multiple knowledge gaps:
@@ -617,7 +707,739 @@ custom_events:
       suggested_description: "Feature usage tracking for product adoption analysis."
 ```
 
-#### Updated Opening Message with Custom Objects
+### Web Event Semantic Analysis
+
+Raw web events (page views, clicks) are meaningless without interpretation. Phase 0 must detect patterns and suggest behavioral segments as building blocks.
+
+#### Page Pattern Detection
+
+```typescript
+interface PagePattern {
+  pattern: string | RegExp;
+  behavior: string;
+  intent: string;
+  saasStage: SaaSStage;
+  segmentSuggestion: string;
+}
+
+const PAGE_PATTERNS: PagePattern[] = [
+  // Purchase Intent
+  {
+    pattern: /\/(checkout|cart|payment|subscribe|upgrade|buy)/i,
+    behavior: "checkout_intent",
+    intent: "Ready to purchase",
+    saasStage: "conversion",
+    segmentSuggestion: "Showed Purchase Intent"
+  },
+  {
+    pattern: /\/(pricing|plans|packages|compare)/i,
+    behavior: "pricing_evaluation",
+    intent: "Evaluating pricing",
+    saasStage: "evaluation",
+    segmentSuggestion: "Viewed Pricing"
+  },
+  
+  // Product Engagement
+  {
+    pattern: /\/(dashboard|app|console|portal)/i,
+    behavior: "product_usage",
+    intent: "Using product",
+    saasStage: "activation",
+    segmentSuggestion: "Active Product Users"
+  },
+  {
+    pattern: /\/(settings|account|profile|preferences)/i,
+    behavior: "account_management",
+    intent: "Managing account",
+    saasStage: "retention",
+    segmentSuggestion: "Managing Settings"
+  },
+  
+  // Learning / Onboarding
+  {
+    pattern: /\/(docs|documentation|help|support|faq|guide|tutorial)/i,
+    behavior: "learning",
+    intent: "Learning product",
+    saasStage: "onboarding",
+    segmentSuggestion: "Reading Documentation"
+  },
+  {
+    pattern: /\/(getting-started|quickstart|onboarding|setup)/i,
+    behavior: "onboarding",
+    intent: "Getting started",
+    saasStage: "onboarding",
+    segmentSuggestion: "In Onboarding Flow"
+  },
+  
+  // Content Consumption
+  {
+    pattern: /\/(blog|articles?|news|updates)/i,
+    behavior: "content_consumption",
+    intent: "Consuming content",
+    saasStage: "awareness",
+    segmentSuggestion: "Blog Readers"
+  },
+  {
+    pattern: /\/(case-stud|success-stor|testimonial|customer)/i,
+    behavior: "social_proof",
+    intent: "Seeking validation",
+    saasStage: "consideration",
+    segmentSuggestion: "Viewed Social Proof"
+  },
+  {
+    pattern: /\/(webinar|demo|video|watch)/i,
+    behavior: "demo_interest",
+    intent: "Wants to see product",
+    saasStage: "consideration",
+    segmentSuggestion: "Watched Demo Content"
+  },
+  
+  // Churn Signals
+  {
+    pattern: /\/(cancel|downgrade|close-account|unsubscribe)/i,
+    behavior: "churn_intent",
+    intent: "Considering leaving",
+    saasStage: "churn_risk",
+    segmentSuggestion: "Showed Churn Intent"
+  },
+  {
+    pattern: /\/(competitor|alternative|vs-|compare-to)/i,
+    behavior: "competitor_research",
+    intent: "Evaluating alternatives",
+    saasStage: "churn_risk",
+    segmentSuggestion: "Researching Competitors"
+  },
+  
+  // Feature Interest
+  {
+    pattern: /\/(features?|capabilities|integrations?|api)/i,
+    behavior: "feature_exploration",
+    intent: "Exploring capabilities",
+    saasStage: "evaluation",
+    segmentSuggestion: "Exploring Features"
+  },
+  {
+    pattern: /\/(enterprise|security|compliance|soc2|gdpr)/i,
+    behavior: "enterprise_evaluation",
+    intent: "Enterprise buyer",
+    saasStage: "evaluation",
+    segmentSuggestion: "Enterprise Evaluators"
+  }
+];
+
+type SaaSStage = 
+  | "awareness"      // Just discovered you
+  | "consideration"  // Evaluating you
+  | "evaluation"     // Comparing options
+  | "conversion"     // Ready to buy
+  | "onboarding"     // Just signed up
+  | "activation"     // Using product
+  | "retention"      // Engaged customer
+  | "expansion"      // Upsell opportunity
+  | "churn_risk";    // May leave
+```
+
+#### Web Event Discovery
+
+```typescript
+async function discoverWebEvents(): Promise<WebEventAnalysis> {
+  // Get sample of page paths
+  const pagePaths = await runQuery({
+    modelName: "marketing.web_metrics",
+    queryAsSourceText: `
+      run: web_metrics -> {
+        group_by: pagePath
+        aggregate: 
+          views is count(),
+          unique_visitors is count(distinct visitorId)
+        order_by: views desc
+        limit: 500
+      }
+    `
+  });
+  
+  // Analyze patterns
+  const patternAnalysis = analyzePagePatterns(pagePaths);
+  
+  // Get page titles for context
+  const pageTitles = await runQuery({
+    modelName: "marketing.web_metrics",
+    queryAsSourceText: `
+      run: web_metrics -> {
+        group_by: pagePath, pageTitle
+        aggregate: views is count()
+        order_by: views desc
+        limit: 200
+      }
+    `
+  });
+  
+  // Detect custom patterns from actual data
+  const customPatterns = detectCustomPatterns(pagePaths, pageTitles);
+  
+  return {
+    totalPages: pagePaths.length,
+    recognizedPatterns: patternAnalysis.recognized,
+    unrecognizedPages: patternAnalysis.unrecognized,
+    customPatternsDetected: customPatterns,
+    suggestedSegments: generateSegmentSuggestions(patternAnalysis)
+  };
+}
+
+function analyzePagePatterns(pages: PageData[]): PatternAnalysis {
+  const recognized: RecognizedPage[] = [];
+  const unrecognized: UnrecognizedPage[] = [];
+  
+  for (const page of pages) {
+    let matched = false;
+    
+    for (const pattern of PAGE_PATTERNS) {
+      if (pattern.pattern instanceof RegExp 
+          ? pattern.pattern.test(page.pagePath)
+          : page.pagePath.includes(pattern.pattern)) {
+        recognized.push({
+          ...page,
+          behavior: pattern.behavior,
+          intent: pattern.intent,
+          saasStage: pattern.saasStage,
+          suggestedSegment: pattern.segmentSuggestion
+        });
+        matched = true;
+        break;
+      }
+    }
+    
+    if (!matched) {
+      unrecognized.push(page);
+    }
+  }
+  
+  return { recognized, unrecognized };
+}
+```
+
+#### Custom Pattern Detection
+
+Detect patterns from actual URL structure:
+
+```typescript
+function detectCustomPatterns(
+  pages: PageData[], 
+  titles: PageTitleData[]
+): CustomPattern[] {
+  const patterns: CustomPattern[] = [];
+  
+  // Detect URL structure patterns
+  // e.g., /product/{id}, /user/{id}/settings, /workspace/{id}/dashboard
+  
+  const pathSegments = pages.map(p => p.pagePath.split("/").filter(Boolean));
+  
+  // Find common prefixes with variable segments
+  const prefixCounts = new Map<string, number>();
+  
+  for (const segments of pathSegments) {
+    if (segments.length >= 2) {
+      // Look for patterns like /docs/*, /blog/*, /app/*
+      const prefix = `/${segments[0]}`;
+      prefixCounts.set(prefix, (prefixCounts.get(prefix) || 0) + 1);
+    }
+  }
+  
+  // Identify significant prefixes (> 10 pages)
+  for (const [prefix, count] of prefixCounts) {
+    if (count >= 10) {
+      // Check if this is a known pattern
+      const isKnown = PAGE_PATTERNS.some(p => 
+        p.pattern instanceof RegExp 
+          ? p.pattern.test(prefix)
+          : prefix.includes(p.pattern as string)
+      );
+      
+      if (!isKnown) {
+        patterns.push({
+          pattern: `${prefix}/*`,
+          pageCount: count,
+          samplePaths: pages
+            .filter(p => p.pagePath.startsWith(prefix))
+            .slice(0, 5)
+            .map(p => p.pagePath),
+          needsClassification: true,
+          suggestion: `Detected ${count} pages under ${prefix}. What do these represent?`
+        });
+      }
+    }
+  }
+  
+  return patterns;
+}
+```
+
+### The Semantic Data Layer: Segments as Building Blocks
+
+**Key Insight**: Raw data (events, fields) is the foundation, but **segments are the semantic layer** that gives data meaning and enables composable queries.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         COMPOSABLE DATA ARCHITECTURE                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  LAYER 3: BUSINESS QUERIES (Complex Compositions)                          │
+│  ─────────────────────────────────────────────────                          │
+│  "Churned enterprise customers who were power users                         │
+│   but showed declining engagement before churning"                          │
+│         │                                                                   │
+│         ▼                                                                   │
+│  ┌──────────────────────────────────────────────────────────────┐          │
+│  │ Enterprise Customers  ∩  Churned  ∩  Was Power User          │          │
+│  │      ∩  Had Declining Engagement Pattern                     │          │
+│  └──────────────────────────────────────────────────────────────┘          │
+│                                                                             │
+│  LAYER 2: BEHAVIORAL SEGMENTS (Reusable Building Blocks)                    │
+│  ───────────────────────────────────────────────────────                    │
+│                                                                             │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐          │
+│  │  Enterprise │ │   Churned   │ │ Power User  │ │  Declining  │          │
+│  │  Customers  │ │  Customers  │ │  (last 90d) │ │ Engagement  │          │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘          │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐          │
+│  │   Active    │ │   At Risk   │ │   Showed    │ │   Viewed    │          │
+│  │   Users     │ │   (score)   │ │ Churn Intent│ │   Pricing   │          │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘          │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐          │
+│  │    Blog     │ │    Docs     │ │   Demo      │ │  Checkout   │          │
+│  │   Readers   │ │   Readers   │ │  Watchers   │ │  Visitors   │          │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘          │
+│                                                                             │
+│  LAYER 1: RAW DATA (Events, Objects, Fields)                               │
+│  ───────────────────────────────────────────                                │
+│  • web_metrics.pagePath, pageTitle, timestamp                              │
+│  • custom-event.user-login: userId, timestamp                              │
+│  • custom-object.subscription: status, plan, mrr                           │
+│  • crm.contact: attributes.*, identifiers.*                                │
+│  • crm.company: attributes.*, associations.*                               │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Segment Generation from Patterns
+
+```typescript
+interface BehavioralSegmentSuggestion {
+  name: string;
+  description: string;
+  category: SegmentCategory;
+  predicate: Predicate;
+  saasStage: SaaSStage;
+  composableWith: string[];  // Other segments this combines well with
+  businessValue: string;
+}
+
+type SegmentCategory = 
+  | "lifecycle"        // Customer status
+  | "engagement"       // Product usage
+  | "intent"           // Purchase/churn signals
+  | "behavior"         // Web/app behavior
+  | "demographic";     // Company/contact attributes
+
+async function generateBehavioralSegments(
+  analysis: WebEventAnalysis
+): Promise<BehavioralSegmentSuggestion[]> {
+  
+  const suggestions: BehavioralSegmentSuggestion[] = [];
+  
+  // Group recognized pages by behavior
+  const byBehavior = groupBy(analysis.recognizedPatterns, "behavior");
+  
+  for (const [behavior, pages] of Object.entries(byBehavior)) {
+    const pattern = PAGE_PATTERNS.find(p => p.behavior === behavior)!;
+    const totalViews = pages.reduce((sum, p) => sum + p.views, 0);
+    
+    if (totalViews < 100) continue; // Skip low-volume behaviors
+    
+    // Build predicate from page paths
+    const pagePaths = pages.map(p => p.pagePath);
+    const predicate = buildPageViewPredicate(pagePaths);
+    
+    suggestions.push({
+      name: pattern.segmentSuggestion,
+      description: `Contacts who ${pattern.intent.toLowerCase()} in the last 30 days`,
+      category: "behavior",
+      predicate,
+      saasStage: pattern.saasStage,
+      composableWith: getComposableSegments(pattern.saasStage),
+      businessValue: getBusinessValue(behavior)
+    });
+  }
+  
+  return suggestions;
+}
+
+function buildPageViewPredicate(pagePaths: string[]): Predicate {
+  // Build a predicate that matches any of these page paths
+  // Using contains or regex depending on pattern complexity
+  
+  if (pagePaths.length === 1) {
+    return {
+      type: "event",
+      eventType: "web_page_view",
+      condition: {
+        type: "string",
+        attribute: "pagePath",
+        operator: "contains",
+        value: pagePaths[0]
+      },
+      timeWindow: { value: 30, unit: "days" }
+    };
+  }
+  
+  // Multiple paths - use OR
+  return {
+    type: "event",
+    eventType: "web_page_view",
+    condition: {
+      type: "or",
+      predicates: pagePaths.map(path => ({
+        type: "string",
+        attribute: "pagePath",
+        operator: "contains",
+        value: extractPatternFromPath(path)
+      }))
+    },
+    timeWindow: { value: 30, unit: "days" }
+  };
+}
+
+function getComposableSegments(stage: SaaSStage): string[] {
+  // Suggest segments that make sense to combine
+  const compositions: Record<SaaSStage, string[]> = {
+    awareness: ["Enterprise Evaluators", "Blog Readers"],
+    consideration: ["Viewed Pricing", "Watched Demo"],
+    evaluation: ["Viewed Pricing", "Enterprise Evaluators"],
+    conversion: ["Active Users", "Enterprise Customers"],
+    onboarding: ["Active Users", "Reading Documentation"],
+    activation: ["Power Users", "Feature Adopters"],
+    retention: ["At Risk", "Declining Engagement"],
+    expansion: ["Power Users", "Feature Exploration"],
+    churn_risk: ["Showed Churn Intent", "Declining Engagement", "Was Power User"]
+  };
+  
+  return compositions[stage] || [];
+}
+
+function getBusinessValue(behavior: string): string {
+  const values: Record<string, string> = {
+    checkout_intent: "High conversion potential - prioritize for sales follow-up",
+    pricing_evaluation: "Active evaluation - nurture with comparison content",
+    product_usage: "Engaged customers - monitor for expansion signals",
+    learning: "Onboarding journey - ensure completion",
+    content_consumption: "Top-of-funnel - nurture toward evaluation",
+    churn_intent: "URGENT: Retention intervention needed",
+    competitor_research: "At-risk - proactive retention outreach"
+  };
+  
+  return values[behavior] || "Monitor for engagement patterns";
+}
+```
+
+#### Segment Catalog Structure
+
+Organize suggested segments into a catalog:
+
+```yaml
+segment_catalog:
+  lifecycle:
+    - name: "Active Customers"
+      description: "Contacts at companies with active subscriptions"
+      requires: ["custom-object.subscription"]
+      predicate: { ... }
+      
+    - name: "Churned Customers"
+      description: "Contacts at companies that cancelled"
+      requires: ["custom-object.subscription", "company.churnedAt"]
+      predicate: { ... }
+      gap_if_missing: "Need churnedAt field on company or subscription status"
+      
+    - name: "Trial Users"
+      description: "Contacts in trial period"
+      requires: ["custom-object.subscription.status=trial OR company.trialEndsAt"]
+      
+  engagement:
+    - name: "Active Users (Last 7 days)"
+      description: "Contacts with product login in last 7 days"
+      requires: ["custom-event.user-login"]
+      predicate: 
+        type: event
+        eventType: custom-event.user-login
+        timeWindow: { value: 7, unit: days }
+        
+    - name: "Power Users"
+      description: "Contacts with 10+ sessions in last 30 days"
+      requires: ["custom-event.user-login"]
+      predicate:
+        type: event
+        eventType: custom-event.user-login
+        aggregation: { function: count, operator: gte, value: 10 }
+        timeWindow: { value: 30, unit: days }
+        
+    - name: "Declining Engagement"
+      description: "Users whose activity dropped >50% vs previous period"
+      requires: ["custom-event.user-login", "computed segment"]
+      complexity: "advanced"
+      
+  intent:
+    - name: "Showed Purchase Intent"
+      description: "Visited checkout/pricing/upgrade pages"
+      requires: ["marketing.web_metrics"]
+      predicate:
+        type: event
+        eventType: web_page_view
+        condition:
+          attribute: pagePath
+          operator: matches
+          value: "(checkout|pricing|upgrade|subscribe)"
+          
+    - name: "Showed Churn Intent"
+      description: "Visited cancel/downgrade pages"
+      requires: ["marketing.web_metrics"]
+      predicate:
+        type: event
+        eventType: web_page_view
+        condition:
+          attribute: pagePath
+          operator: matches
+          value: "(cancel|downgrade|close-account)"
+          
+  behavior:
+    - name: "Documentation Readers"
+      description: "Engaged with help/docs content"
+      requires: ["marketing.web_metrics"]
+      predicate: { ... }
+      
+    - name: "Blog Readers"
+      description: "Consuming blog content"
+      requires: ["marketing.web_metrics"]
+      
+    - name: "Enterprise Evaluators"
+      description: "Viewing enterprise/security/compliance pages"
+      requires: ["marketing.web_metrics"]
+```
+
+#### Segment Foundation Assessment
+
+Before complex queries, assess which building blocks exist:
+
+```typescript
+async function assessSegmentFoundation(): Promise<SegmentFoundationReport> {
+  const catalog = getSegmentCatalog();
+  const workspaceCapabilities = await discoverCapabilities();
+  
+  const assessment = {
+    available: [],
+    creatable: [],
+    blocked: []
+  };
+  
+  for (const segment of catalog.allSegments) {
+    const status = checkSegmentFeasibility(segment, workspaceCapabilities);
+    
+    if (status.feasible) {
+      if (status.exists) {
+        assessment.available.push({
+          ...segment,
+          existingAudienceId: status.audienceId
+        });
+      } else {
+        assessment.creatable.push({
+          ...segment,
+          predicate: status.predicate,
+          recommendation: "Create this segment to enable advanced queries"
+        });
+      }
+    } else {
+      assessment.blocked.push({
+        ...segment,
+        missingRequirements: status.missing,
+        howToUnblock: status.resolution
+      });
+    }
+  }
+  
+  return {
+    summary: {
+      available: assessment.available.length,
+      creatable: assessment.creatable.length,
+      blocked: assessment.blocked.length,
+      foundationScore: calculateFoundationScore(assessment)
+    },
+    segments: assessment,
+    recommendations: prioritizeSegmentCreation(assessment)
+  };
+}
+
+function calculateFoundationScore(assessment: Assessment): number {
+  // Score based on critical segments available
+  const criticalSegments = [
+    "Active Customers",
+    "Churned Customers", 
+    "Active Users",
+    "Showed Purchase Intent",
+    "Showed Churn Intent"
+  ];
+  
+  const available = criticalSegments.filter(name => 
+    assessment.available.some(s => s.name === name) ||
+    assessment.creatable.some(s => s.name === name)
+  );
+  
+  return Math.round((available.length / criticalSegments.length) * 100);
+}
+```
+
+#### Interactive Segment Builder
+
+When user wants a complex query, decompose into building blocks:
+
+```markdown
+**User**: I want to target churned enterprise customers who were power users
+
+**Agent**: Let me break this down into building blocks:
+
+📦 **Required Segments**
+
+1. **Enterprise Customers** 
+   - Status: ⚠️ Needs definition
+   - Question: What makes a customer "enterprise"? (ACV > $X? Plan = enterprise? Employee count?)
+
+2. **Churned Customers**
+   - Status: ❌ Blocked
+   - Missing: `churnedAt` field on company
+   - Workaround: If you have subscription object, I can infer from `status = cancelled`
+
+3. **Power Users**
+   - Status: ✅ Can create
+   - Definition: 10+ logins in 30 days (using user-login events)
+   - Question: Is this the right threshold for "power user"?
+
+🔧 **Let's build these one by one:**
+
+First, I'll create the "Power Users" segment since we have the data.
+What's your threshold for enterprise? Options:
+- A) ACV > $X (need ACV field)
+- B) Plan = "enterprise" (need plan field)  
+- C) Employee count > X (need company.employees)
+- D) Manual list (upload company IDs)
+```
+
+#### Pre-Discovery Report Addition
+
+```yaml
+behavioral_patterns:
+  web_events:
+    total_unique_pages: 1,247
+    recognized_patterns: 834 (67%)
+    unrecognized_pages: 413 (33%)
+    
+    by_category:
+      purchase_intent:
+        pages: 45
+        views_30d: 12,400
+        segment_suggested: "Showed Purchase Intent"
+        
+      product_usage:
+        pages: 312
+        views_30d: 89,000
+        segment_suggested: "Active Product Users"
+        
+      learning:
+        pages: 156
+        views_30d: 34,500
+        segment_suggested: "Documentation Readers"
+        
+      churn_signals:
+        pages: 8
+        views_30d: 890
+        segment_suggested: "Showed Churn Intent"
+        priority: "CRITICAL - create immediately"
+        
+    custom_patterns_detected:
+      - pattern: "/workspace/*"
+        pages: 234
+        suggestion: "Appears to be product workspace pages - classify as product_usage?"
+      - pattern: "/admin/*"
+        pages: 45
+        suggestion: "Admin pages - classify as account_management?"
+
+  segment_foundation:
+    score: 45%  # Of critical segments available/creatable
+    
+    available_now:
+      - "Active Users (7d)" via user-login events
+      - "Documentation Readers" via web events
+      - "Showed Purchase Intent" via web events
+      
+    can_create:
+      - "Power Users" (10+ logins)
+      - "Blog Readers"
+      - "Enterprise Evaluators"
+      
+    blocked:
+      - "Churned Customers" - missing churnedAt
+      - "Enterprise Customers" - missing tier/ACV
+      - "At Risk Score" - needs engagement model
+      
+  recommendation: |
+    Your workspace has good behavioral data but lacks lifecycle segments.
+    Priority actions:
+    1. Create "Showed Churn Intent" segment immediately (data available)
+    2. Add subscription status to enable "Active/Churned Customers"
+    3. Define "Enterprise" criteria to enable tier-based targeting
+```
+
+#### Updated Opening Message with Segments
+
+```markdown
+**Agent**:
+
+I've scanned your workspace and analyzed your data for SaaS capabilities.
+
+📊 **Data Foundation**
+- 1.27M contacts, 258K companies (85% linked)
+- Subscription data ✅ (4,521 records)
+- Login events ✅ (45K/month)
+- Web tracking ✅ (89K page views/month)
+
+🧱 **Segment Building Blocks** (Foundation Score: 45%)
+
+| Category | Available | Can Create | Blocked |
+|----------|-----------|------------|---------|
+| Lifecycle | 0 | 0 | 2 |
+| Engagement | 1 | 2 | 0 |
+| Intent | 0 | 3 | 0 |
+| Behavior | 0 | 4 | 0 |
+
+✅ **I can create these segments now:**
+- Active Users (7d, 30d)
+- Power Users (10+ logins)
+- Showed Purchase Intent (visited pricing/checkout)
+- Showed Churn Intent (visited cancel pages) ⚠️ **Priority!**
+- Documentation Readers
+- Blog Readers
+
+❌ **Blocked until data is added:**
+- Churned Customers (need `churnedAt` or subscription status)
+- Enterprise Customers (need ACV or plan tier)
+
+🎯 **For your goal** (target churned high-value customers):
+You need these building blocks:
+1. ❌ Churned Customers → needs subscription status mapping
+2. ❌ Enterprise/High-Value → needs ACV field
+3. ✅ Was Power User → can create from login history
+
+**Shall I:**
+1. Create the available segments now as your foundation?
+2. Show you how to add the missing data for lifecycle segments?
+3. Build a workaround using subscription object for "churned"?
+```
 
 ```markdown
 **Agent**:
