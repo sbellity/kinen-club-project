@@ -23,13 +23,23 @@ A conversational skill that guides users through a structured discovery and setu
 │                        SAAS DATA ONBOARDING WORKFLOW                        │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  PHASE 1: BUSINESS DISCOVERY                                                │
-│  ─────────────────────────                                                  │
-│  "Tell me about your business"                                              │
-│  • What does your SaaS do?                                                  │
-│  • Who are your customers? (B2B, B2C, B2B2C)                               │
-│  • What's your pricing model? (subscription, usage, hybrid)                 │
-│  • How is your sales org structured? (PLG, sales-led, hybrid)              │
+│  PHASE 0: AUTOMATED PRE-DISCOVERY (Silent)                                  │
+│  ─────────────────────────────────────────                                  │
+│  "Let me understand your workspace first"                                   │
+│  • Scan all catalogs and models                                             │
+│  • Detect business model signals from data structure                        │
+│  • Identify existing SaaS-relevant fields                                   │
+│  • Infer customer model (B2B/B2C) from associations                        │
+│  • Generate pre-populated hypothesis                                        │
+│                                                                             │
+│                              ↓                                              │
+│                                                                             │
+│  PHASE 1: BUSINESS DISCOVERY (Informed Conversation)                        │
+│  ───────────────────────────────────────────────────                        │
+│  "Based on what I found, let me confirm..."                                 │
+│  • Validate detected business model                                         │
+│  • Clarify pricing/sales motion                                             │
+│  • Confirm key use cases                                                    │
 │                                                                             │
 │                              ↓                                              │
 │                                                                             │
@@ -92,54 +102,394 @@ A conversational skill that guides users through a structured discovery and setu
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Phase 1: Business Discovery
+## Phase 0: Automated Pre-Discovery
 
-### Conversation Flow
+### Purpose
+
+Before asking the user anything, scan the workspace to:
+1. **Detect business model signals** from existing data
+2. **Pre-populate hypotheses** for Phase 1 confirmation
+3. **Identify existing SaaS-relevant fields** already in place
+4. **Assess data maturity** to tailor guidance complexity
+
+### Discovery Signals
+
+#### Customer Model Detection (B2B vs B2C)
+
+| Signal | B2B Indicator | B2C Indicator |
+|--------|---------------|---------------|
+| `crm.company` records | >1,000 companies | <100 or empty |
+| Contact-Company association | High coverage (>50%) | Low/none |
+| Fields: `companyName`, `industry` | Populated | Sparse |
+| Fields: `jobTitle`, `department` | Populated | Sparse |
+| Average contacts per company | Multiple (2-50) | 1 or N/A |
+| Fields: personal (birthday, gender) | Sparse | Populated |
+
+#### Pricing Model Detection
+
+| Signal | Subscription | Usage-Based | Seat-Based |
+|--------|--------------|-------------|------------|
+| Fields: `mrr`, `arr` | Present | Maybe | Present |
+| Fields: `seatCount`, `users` | Sparse | Sparse | Present |
+| Fields: `usageVolume`, `credits` | Sparse | Present | Sparse |
+| Fields: `plan`, `tier` | Present | Present | Present |
+
+#### Sales Motion Detection
+
+| Signal | PLG (Self-Serve) | Sales-Led | Hybrid |
+|--------|------------------|-----------|--------|
+| `lead_stage` field populated | <10% | >30% | 10-30% |
+| `activities.activity` volume | Low | High | Medium |
+| Lead/Opportunity activities | Few | Many | Mixed |
+| `accountManager` populated | Sparse | >50% | Variable |
+| Trial-related fields | Present | Sparse | Present |
+
+#### Data Maturity Detection
+
+| Maturity Level | Signals |
+|----------------|---------|
+| **Nascent** | <10k contacts, no custom fields, no integrations |
+| **Basic** | 10k-100k contacts, some custom fields, basic CRM |
+| **Established** | 100k+ contacts, multiple integrations, good coverage |
+| **Advanced** | Custom objects, events, high field coverage (>50%) |
+
+### Pre-Discovery Workflow
+
+```typescript
+async function runPreDiscovery(): Promise<PreDiscoveryReport> {
+  // 1. Scan workspace structure
+  const catalogs = await listCatalogs();
+  const models = await listModels();
+  
+  // 2. Get volume stats
+  const contactCount = await countModel("crm.contact");
+  const companyCount = await countModel("crm.company");
+  
+  // 3. Analyze contact-company relationship
+  const companyLinkage = await runQuery({
+    modelName: "crm.contact",
+    query: `aggregate: 
+      total is count(),
+      has_company is count() { where: companyRefs != null }`
+  });
+  
+  // 4. Check for SaaS-relevant fields
+  const contactSchema = await getModel("crm.contact");
+  const companySchema = await getModel("crm.company");
+  
+  const saasFields = detectSaaSFields(contactSchema, companySchema);
+  
+  // 5. Check activity patterns
+  const activityStats = await runQuery({
+    modelName: "activities.activity",
+    query: `group_by: targetType; aggregate: total is count()`
+  });
+  
+  // 6. Check for custom objects (subscription, etc.)
+  const customObjects = models.filter(m => m.name.startsWith("custom-object."));
+  
+  // 7. Generate hypothesis
+  return {
+    detectedModel: inferBusinessModel({
+      contactCount,
+      companyCount,
+      companyLinkage,
+      saasFields,
+      activityStats,
+      customObjects
+    }),
+    confidence: calculateConfidence(...),
+    existingCapabilities: saasFields,
+    maturityLevel: assessMaturity(...),
+    recommendations: generateInitialRecs(...)
+  };
+}
+```
+
+### SaaS Field Detection
+
+```typescript
+const SAAS_FIELD_PATTERNS = {
+  // Customer lifecycle
+  customerStatus: {
+    patterns: ["customerStatus", "customer_status", "accountStatus", "status"],
+    type: "enum",
+    category: "lifecycle"
+  },
+  
+  // Revenue
+  acv: {
+    patterns: ["acv", "annual_contract_value", "annualContractValue", "contractValue"],
+    type: "number",
+    category: "revenue"
+  },
+  mrr: {
+    patterns: ["mrr", "monthly_recurring_revenue", "monthlyRevenue"],
+    type: "number",
+    category: "revenue"
+  },
+  
+  // Churn
+  churnedAt: {
+    patterns: ["churnedAt", "churned_at", "cancellation_date", "cancelledAt"],
+    type: "timestamp",
+    category: "churn"
+  },
+  churnReason: {
+    patterns: ["churnReason", "cancellation_reason", "cancelReason"],
+    type: "string",
+    category: "churn"
+  },
+  
+  // Subscription
+  plan: {
+    patterns: ["plan", "planName", "tier", "subscription_plan"],
+    type: "string",
+    category: "subscription"
+  },
+  seatCount: {
+    patterns: ["seatCount", "seats", "userCount", "licenses"],
+    type: "number",
+    category: "subscription"
+  },
+  
+  // Engagement
+  lastLogin: {
+    patterns: ["lastLogin", "last_login", "lastActive", "lastSeen"],
+    type: "timestamp",
+    category: "engagement"
+  },
+  
+  // Sales
+  leadStage: {
+    patterns: ["lead_stage", "leadStage", "salesStage", "pipelineStage"],
+    type: "enum",
+    category: "sales"
+  },
+  accountOwner: {
+    patterns: ["accountOwner", "owner", "salesRep", "accountManager"],
+    type: "string",
+    category: "sales"
+  }
+};
+
+function detectSaaSFields(contactSchema, companySchema) {
+  const found = {};
+  const missing = {};
+  
+  for (const [fieldKey, config] of Object.entries(SAAS_FIELD_PATTERNS)) {
+    const match = findFieldMatch([...contactSchema.fields, ...companySchema.fields], config.patterns);
+    if (match) {
+      found[fieldKey] = {
+        ...config,
+        actualField: match.path,
+        entity: match.entity
+      };
+    } else {
+      missing[fieldKey] = config;
+    }
+  }
+  
+  return { found, missing };
+}
+```
+
+### Pre-Discovery Report Structure
+
+```yaml
+pre_discovery_report:
+  # Workspace basics
+  workspace:
+    total_contacts: 1270862
+    total_companies: 258158
+    total_activities: 232960
+    data_age_months: 8
+    
+  # Detected business model (hypothesis)
+  detected_model:
+    customer_type: "b2b"
+    confidence: 0.92
+    signals:
+      - "84.5% contacts linked to companies"
+      - "258k company records present"
+      - "Contact fields include jobTitle, company"
+      
+    pricing_model: "subscription"
+    confidence: 0.65
+    signals:
+      - "No seat/usage fields detected"
+      - "Customer tier field exists (Category_Support)"
+      
+    sales_motion: "hybrid"
+    confidence: 0.78
+    signals:
+      - "Lead stage field exists (0.1% populated)"
+      - "233k activity records (mostly lead-related)"
+      - "Account manager field exists (3.5% populated)"
+  
+  # Existing SaaS fields
+  existing_fields:
+    lifecycle:
+      - field: "company.connectivityCustomer"
+        purpose: "Current customer flag"
+        coverage: "0.17%"
+      - field: "contact.lead_stage"
+        purpose: "Lead funnel position"
+        coverage: "0.11%"
+    
+    revenue: []  # None found
+    
+    churn: []  # None found
+    
+    engagement:
+      - field: "messaging_metrics.*"
+        purpose: "Email engagement"
+        coverage: "High"
+    
+    sales:
+      - field: "company.accountManager"
+        purpose: "Account ownership"
+        coverage: "3.5%"
+      - field: "company.Category_Support"
+        purpose: "Customer tier"
+        coverage: "0.14%"
+  
+  # Missing critical fields
+  missing_fields:
+    critical:
+      - field: "customerStatus"
+        purpose: "Customer lifecycle stage"
+        impact: "Can't segment by customer state"
+      - field: "acv"
+        purpose: "Contract value"
+        impact: "Can't filter by customer value"
+      - field: "churnedAt"
+        purpose: "Churn date"
+        impact: "Can't identify churned customers"
+    
+    important:
+      - field: "lastLogin"
+        purpose: "Product engagement"
+        impact: "Can't detect inactive users"
+      - field: "mrr"
+        purpose: "Monthly revenue"
+        impact: "Can't track revenue metrics"
+  
+  # Data maturity assessment
+  maturity:
+    level: "basic"
+    score: 35
+    breakdown:
+      volume: 80        # Good contact/company volume
+      field_coverage: 20  # Most fields sparse
+      integrations: 30   # Some connectors
+      custom_objects: 10  # No custom objects
+      events: 40         # Activity tracking exists
+  
+  # Initial recommendations (before business context)
+  initial_recommendations:
+    - priority: "critical"
+      action: "Add customerStatus field to company"
+      reason: "Required for any customer lifecycle segmentation"
+    - priority: "critical"  
+      action: "Add acv field to company"
+      reason: "Required for value-based targeting"
+    - priority: "important"
+      action: "Improve field coverage"
+      reason: "Most fields are <5% populated"
+```
+
+### Informed Opening Message
+
+Based on Phase 0, generate an intelligent opening:
 
 ```markdown
-**Agent**: Let me help you set up your workspace for SaaS use cases. 
-First, I need to understand your business model.
+**Agent**:
 
-**Questions**:
+I've scanned your Bird workspace. Here's what I found:
 
-1. **Business Type**: What does your SaaS product do?
-   - [ ] Developer tools / API
-   - [ ] Business software (CRM, HR, Finance)
-   - [ ] Consumer app with subscription
-   - [ ] Marketplace / Platform
+📊 **Your Data**
+- 1.27M contacts, 258K companies
+- Strong contact-company linkage (85%)
+- 8 months of data history
+
+🔍 **What I Detected**
+Based on your data structure, it looks like you're a **B2B SaaS company** 
+with a **hybrid sales motion** (mix of self-serve and sales-assisted).
+
+- You have lead tracking (lead_stage field, 233k activities)
+- You have account management (accountManager, customer tiers)
+- 427 companies are flagged as customers
+
+⚠️ **Key Gaps I Found**
+For SaaS use cases like churn analysis and value-based targeting, you're missing:
+
+| Gap | Impact |
+|-----|--------|
+| `customerStatus` enum | Can't identify churned vs active |
+| `acv` / contract value | Can't filter by customer value |
+| `churnedAt` timestamp | Can't target recent churns |
+
+**Let me confirm a few things about your business to give you specific guidance:**
+
+1. Is my assessment correct - are you B2B SaaS with both self-serve and sales? 
+2. What billing system do you use? (Stripe, Chargebee, etc.)
+3. What's your most important use case right now?
+   - Win back churned customers
+   - Identify at-risk accounts
+   - Expand existing customers
+   - Improve lead qualification
+```
+
+## Phase 1: Business Discovery (Informed Conversation)
+
+Phase 1 is now a **validation and refinement** conversation, not a cold start.
+
+### Conversation Flow (Informed by Phase 0)
+
+```markdown
+**Agent**: 
+I've already scanned your workspace. Based on what I found, I have a few 
+hypotheses - let me confirm them with you.
+
+**Confirmation Questions** (pre-populated from Phase 0):
+
+1. **Business Model Confirmation**:
+   I detected you're B2B SaaS (85% of contacts linked to companies, 
+   258k companies, job titles present). Is that correct?
+   - [x] Yes, B2B
+   - [ ] Actually B2C
+   - [ ] Mixed B2B and B2C
+
+2. **Pricing Model** (couldn't detect - no pricing fields found):
+   How do you charge customers?
+   - [ ] Monthly/annual subscription (fixed price)
+   - [ ] Seat-based (per user)
+   - [ ] Usage-based (pay for what you use)
+   - [ ] Hybrid
+
+3. **Sales Motion Confirmation**:
+   I found lead_stage tracking and account managers, suggesting 
+   hybrid (self-serve + sales). Correct?
+   - [x] Yes, hybrid
+   - [ ] Mostly self-serve
+   - [ ] Mostly sales-led
+
+4. **Data Sources** (critical for setup):
+   Where does your subscription/billing data live?
+   - [ ] Stripe
+   - [ ] Chargebee
+   - [ ] Salesforce (Opportunity/Account)
+   - [ ] Internal database
+   - [ ] Spreadsheets
    - [ ] Other: ___
 
-2. **Customer Model**: Who are your customers?
-   - [ ] B2B (companies buy)
-   - [ ] B2C (individuals buy)
-   - [ ] B2B2C (companies buy for their users)
-   - [ ] Mixed
-
-3. **Pricing Model**: How do you charge?
-   - [ ] Pure subscription (monthly/annual)
-   - [ ] Usage-based (pay per use)
-   - [ ] Seat-based (per user)
-   - [ ] Hybrid (base + usage)
-   - [ ] One-time purchase + subscription
-
-4. **Sales Motion**: How do customers buy?
-   - [ ] Self-serve (PLG - Product Led Growth)
-   - [ ] Sales-led (demos, contracts)
-   - [ ] Hybrid (self-serve + sales assist)
-   - [ ] Partner/reseller
-
-5. **Contract Structure**: 
-   - [ ] Month-to-month
-   - [ ] Annual contracts
-   - [ ] Multi-year deals
-   - [ ] Mixed
-
-6. **Key Metrics You Track**:
-   - [ ] MRR / ARR
-   - [ ] ACV (Annual Contract Value)
-   - [ ] Seats / Users
-   - [ ] Usage volume
-   - [ ] NRR (Net Revenue Retention)
+5. **Priority Use Case**:
+   Based on the gaps I found, which matters most right now?
+   - [ ] **Win back churned high-value customers** (needs: customerStatus, acv, churnedAt)
+   - [ ] **Identify at-risk accounts** (needs: usage data, engagement signals)
+   - [ ] **Expand existing customers** (needs: usage limits, seat counts)
+   - [ ] **Qualify and route leads** (needs: enriched lead_stage)
 ```
 
 ### Business Profile Output
@@ -800,10 +1150,64 @@ The skill produces:
 5. **setup-guide.md** - Step-by-step setup instructions
 6. **validation-report.md** - Post-setup verification
 
+## Workflow Summary (Updated with Phase 0)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  PHASE 0: AUTOMATED PRE-DISCOVERY (Silent, ~30 seconds)                     │
+│  ───────────────────────────────────────────────────────                    │
+│  • Scan catalogs, models, volumes                                           │
+│  • Detect business model signals (B2B/B2C, sales motion)                    │
+│  • Find existing SaaS fields, calculate coverage                            │
+│  • Identify gaps, assess maturity                                           │
+│  → Output: pre_discovery_report + informed opening message                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  PHASE 1: BUSINESS DISCOVERY (Informed, ~2 minutes)                         │
+│  ─────────────────────────────────────────────────                          │
+│  • Confirm detected business model                                          │
+│  • Clarify pricing/sales motion if uncertain                                │
+│  • Identify data sources (billing, CRM, product)                            │
+│  • Select priority use case                                                 │
+│  → Output: confirmed_business_profile                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  PHASE 2: DETAILED DATA AUDIT (Already done in Phase 0, expand here)        │
+│  ──────────────────────────────────────────────────────────────────         │
+│  • Deep dive on priority use case requirements                              │
+│  • Field-level quality analysis                                             │
+│  • Association completeness                                                 │
+│  → Output: detailed_data_audit                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  PHASE 3-7: (Same as before)                                                │
+│  • Use Case Requirements Mapping                                            │
+│  • Gap Analysis & Prioritization                                            │
+│  • Data Source Mapping                                                      │
+│  • Setup Guidance                                                           │
+│  • Validation                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Key Insight: Intelligence Before Interaction
+
+Phase 0 transforms the conversation from:
+
+❌ **Cold Start** (Old approach):
+> "What type of business are you? B2B or B2C? What's your pricing model?"
+
+✅ **Informed Start** (New approach):
+> "I see you have 258k companies with 85% of contacts linked to them, 
+> suggesting B2B. You have lead tracking and account managers, suggesting 
+> hybrid sales. Is that right?"
+
+This makes the skill:
+- **Faster** - Skip questions we can answer from data
+- **Smarter** - Show we understand their workspace
+- **More accurate** - Validate assumptions rather than guess
+- **More credible** - Demonstrate value immediately
+
 ## Next Steps
 
-1. **Round 03**: Implement Phase 1-2 (Business + Data Discovery)
-2. **Round 04**: Implement Phase 3-4 (Use Cases + Gap Analysis)
-3. **Round 05**: Implement Phase 5-6 (Source Mapping + Setup)
-4. **Round 06**: Implement Phase 7 (Validation)
-5. **Round 07**: Integration and testing
+1. **Round 03**: Implement Phase 0 (Pre-Discovery) + Phase 1 (Informed Business Discovery)
+2. **Round 04**: Implement Phase 2-3 (Detailed Audit + Use Case Mapping)
+3. **Round 05**: Implement Phase 4-5 (Gap Analysis + Source Mapping)
+4. **Round 06**: Implement Phase 6-7 (Setup Guidance + Validation)
+5. **Round 07**: End-to-end testing with real workspace
