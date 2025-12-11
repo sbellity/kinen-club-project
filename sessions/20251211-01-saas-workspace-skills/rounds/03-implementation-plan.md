@@ -582,6 +582,437 @@ Customer lifecycle segments for SaaS businesses.
 
 ---
 
+---
+
+## Session Deliverables
+
+When a user completes a SaaS semantic layer session, they receive these concrete outputs:
+
+### Deliverable 1: Workspace Discovery Report
+
+**Format**: Markdown artifact saved to session  
+**File**: `artifacts/discovery/workspace-analysis.md`
+
+```markdown
+# Workspace Analysis Report
+
+Generated: 2025-12-11
+Workspace: [workspace-name]
+
+## Executive Summary
+- Total Contacts: 1,270,641
+- Total Companies: 258,432
+- Contact-Company Linkage: 85%
+- Data Maturity Score: 65/100
+
+## Catalogs Discovered
+| Catalog | Models | Status |
+|---------|--------|--------|
+| bird:crm | 5 | ✅ Active |
+| bird:messaging | 8 | ✅ Active |
+| ws:default | 3 | ✅ Custom Data |
+
+## Custom Objects Found
+| Object | Records | SaaS Relevance | Documented |
+|--------|---------|----------------|------------|
+| subscription | 4,521 | Critical | ✅ |
+| ticket | 12,843 | Medium | ❌ |
+
+## Custom Events Found
+| Event | Last 30d | SaaS Relevance | Contact Linked |
+|-------|----------|----------------|----------------|
+| user-login | 45,230 | Critical | ✅ |
+| feature-click | 128,400 | Critical | ✅ |
+
+## Web Behavior Patterns
+| Pattern | Pages | Monthly Views | Segment Created |
+|---------|-------|---------------|-----------------|
+| Pricing Intent | 12 | 8,400 | ✅ |
+| Churn Intent | 4 | 890 | ✅ |
+| Documentation | 156 | 34,500 | ✅ |
+
+## Identity Coverage
+| Identifier | Coverage | Quality |
+|------------|----------|---------|
+| Email | 55% | Medium |
+| Phone | 12% | Low |
+| Customer ID | 78% | High |
+
+## Key Statistics
+[Detailed statistics per model...]
+```
+
+---
+
+### Deliverable 2: Semantic Mapping Document
+
+**Format**: YAML + Markdown artifact  
+**File**: `artifacts/semantic/mapping.yaml`
+
+```yaml
+# SaaS Semantic Mapping
+# Generated: 2025-12-11
+# Workspace: [workspace-name]
+
+business_context:
+  model: B2B SaaS
+  sales_motion: Sales-led with PLG component
+  customer_definition: Company with active subscription
+  enterprise_threshold: ACV > $50,000
+
+domain_mappings:
+  lifecycle:
+    active_customers:
+      status: implemented
+      source: custom-object.subscription
+      predicate_field: status
+      values: [active]
+      
+    churned_customers:
+      status: implemented
+      source: custom-object.subscription
+      predicate_field: status
+      values: [cancelled]
+      notes: "Missing churnedAt timestamp for time-based queries"
+      
+    trial_users:
+      status: blocked
+      missing: subscription.trialEndsAt OR company.trialEndsAt
+      
+  engagement:
+    active_users_7d:
+      status: implemented
+      source: custom-event.user-login
+      time_window: 7 days
+      
+    power_users:
+      status: implemented
+      source: custom-event.user-login
+      threshold: "10+ logins in 30 days"
+      notes: "Threshold confirmed with customer"
+      
+    declining_engagement:
+      status: blocked
+      missing: "Requires computed comparison (this period vs last period)"
+      
+  intent:
+    purchase_intent:
+      status: implemented
+      source: marketing.web_metrics
+      patterns: ["/pricing", "/upgrade", "/checkout"]
+      
+    churn_intent:
+      status: implemented  
+      source: marketing.web_metrics
+      patterns: ["/cancel", "/downgrade"]
+      priority: critical
+      
+  value:
+    enterprise_customers:
+      status: blocked
+      missing: company.acv OR subscription.plan with tier
+      workaround: "Using company.employees > 500 as proxy"
+      
+  reachability:
+    email_reachable:
+      status: implemented
+      coverage: 55%
+      notes: "45% of contacts have no email"
+```
+
+---
+
+### Deliverable 3: Gap Analysis Report
+
+**Format**: Markdown artifact  
+**File**: `artifacts/gaps/gap-analysis.md`
+
+```markdown
+# SaaS Data Gap Analysis
+
+## Summary
+
+| Category | Available | Blocked | Gap Score |
+|----------|-----------|---------|-----------|
+| Lifecycle | 2/4 | 2/4 | 50% |
+| Engagement | 3/5 | 2/5 | 60% |
+| Intent | 4/4 | 0/4 | 100% ✅ |
+| Value | 0/3 | 3/3 | 0% ❌ |
+| Reachability | 3/4 | 1/4 | 75% |
+
+**Overall Semantic Coverage: 57%**
+
+---
+
+## Critical Gaps
+
+### Gap 1: No Enterprise/Value Segmentation
+
+**Impact**: Cannot segment by customer value tier  
+**Blocked Segments**: Enterprise Customers, High-Value Churned, SMB Customers  
+**Blocked Use Cases**: 
+- "Target churned enterprise customers"
+- "Prioritize high-value trials for sales"
+
+**Resolution Options**:
+
+| Option | Effort | Recommendation |
+|--------|--------|----------------|
+| Add `acv` field to company | Low | ✅ Recommended |
+| Add `tier` to subscription | Medium | Alternative |
+| Use employee count as proxy | None | ⚠️ Workaround only |
+
+**Implementation**:
+```yaml
+# Add to company schema
+field:
+  path: attributes.acv
+  type: number
+  description: "Annual Contract Value in USD"
+  
+# Then define Enterprise as:
+predicate:
+  type: attribute
+  attribute: company.acv
+  operator: greaterThan
+  value: 50000
+```
+
+---
+
+### Gap 2: No Churn Timestamp
+
+**Impact**: Cannot query "churned in last X days"  
+**Blocked Segments**: Recently Churned (win-back), Long-ago Churned  
+**Blocked Use Cases**:
+- "Contacts from companies churned in last 90 days"
+
+**Resolution**:
+Add `churnedAt` timestamp to company, populated when subscription status changes to cancelled.
+
+---
+
+## Medium Gaps
+
+### Gap 3: Trial Period Tracking
+[...]
+
+### Gap 4: Declining Engagement Detection
+[...]
+
+---
+
+## Recommendations Priority
+
+1. **Immediate**: Add `acv` field to company (unblocks value segmentation)
+2. **Short-term**: Add `churnedAt` timestamp (unblocks win-back campaigns)
+3. **Medium-term**: Add trial tracking (unblocks trial conversion campaigns)
+```
+
+---
+
+### Deliverable 4: Segment Catalog (Actual Bird Audiences)
+
+**Format**: Bird Audiences created in workspace  
+**Location**: Audiences → "SaaS Semantic Layer" folder
+
+```
+📁 SaaS Semantic Layer/
+├── 📁 Lifecycle/
+│   ├── Active Customers
+│   ├── Churned Customers
+│   └── [Trial Users - blocked]
+├── 📁 Engagement/
+│   ├── Active Users (7d)
+│   ├── Active Users (30d)
+│   ├── Power Users
+│   └── Dormant Users
+├── 📁 Intent/
+│   ├── Showed Purchase Intent
+│   ├── Showed Churn Intent ⚠️
+│   ├── Viewed Pricing
+│   └── Reading Documentation
+├── 📁 Value/
+│   └── [Enterprise Customers - blocked]
+└── 📁 Behavioral/
+    ├── Blog Readers
+    ├── Docs Engaged
+    └── Product Active
+```
+
+**Each audience includes**:
+- Clear name following convention
+- Description explaining the segment
+- Predicate definition
+- Notes on data source
+
+**Audience Description Template**:
+```
+[SaaS Semantic Layer] Active Users (7d)
+
+Definition: Contacts who logged into the product in the last 7 days.
+Source: custom-event.user-login
+Time Window: 7 days rolling
+
+Part of the SaaS Semantic Layer - use as building block for campaigns.
+Combine with other segments: "Active Users ∩ Enterprise Customers"
+```
+
+---
+
+### Deliverable 5: Segment Composition Guide
+
+**Format**: Markdown artifact  
+**File**: `artifacts/semantic/composition-guide.md`
+
+```markdown
+# Segment Composition Guide
+
+## How to Use Your Semantic Layer
+
+Your segments are building blocks. Compose them for specific use cases:
+
+### Example Compositions
+
+#### Win-Back Campaign
+```
+Churned Customers ∩ Was Power User ∩ NOT Showed Churn Intent
+```
+*Rationale: Target former engaged users who didn't show explicit churn intent (may have been involuntary churn)*
+
+#### Expansion Campaign
+```
+Active Customers ∩ Power Users ∩ Showed Purchase Intent
+```
+*Rationale: Engaged customers showing upgrade interest*
+
+#### Churn Prevention
+```
+Active Customers ∩ Showed Churn Intent
+```
+*Rationale: Current customers visiting cancel pages - URGENT*
+
+#### Trial Conversion
+```
+Trial Users ∩ Active Users (7d) ∩ Viewed Pricing
+```
+*Rationale: Engaged trials evaluating pricing*
+
+---
+
+## Composition Matrix
+
+| Use Case | Base Segment | + Filter | + Filter | Priority |
+|----------|--------------|----------|----------|----------|
+| Win-back | Churned | Enterprise | Was Power User | High |
+| Expansion | Active Customers | Power Users | Purchase Intent | Medium |
+| Churn Prevention | Active Customers | Churn Intent | - | URGENT |
+| Onboarding | Trial Users | NOT Active (7d) | - | High |
+
+---
+
+## Segment Dependencies
+
+```
+Enterprise Customers (blocked)
+  └── requires: company.acv OR subscription.tier
+
+High-Value Churned (blocked)
+  └── requires: Enterprise Customers
+  └── requires: Churned Customers ✅
+
+Recently Churned (blocked)
+  └── requires: company.churnedAt
+```
+```
+
+---
+
+### Deliverable 6: Next Steps Action Plan
+
+**Format**: Markdown artifact  
+**File**: `artifacts/next-steps.md`
+
+```markdown
+# Next Steps: Completing Your SaaS Semantic Layer
+
+## Immediate Actions (This Week)
+
+### 1. Add ACV Field to Company
+**Why**: Unblocks all value-based segmentation  
+**How**: 
+1. Go to DataHub → Company schema
+2. Add field: `attributes.acv` (number)
+3. Populate from your billing system
+
+**Once done**: I can create Enterprise/SMB segments
+
+### 2. Create Priority Segments
+These segments are ready to create now:
+- [ ] Showed Churn Intent (CRITICAL - monitor daily)
+- [ ] Power Users (for expansion targeting)
+- [ ] Dormant Users (for re-engagement)
+
+---
+
+## Short-Term Actions (Next 2 Weeks)
+
+### 3. Add Churn Timestamp
+**Why**: Enables time-based win-back campaigns  
+**How**: Add `churnedAt` to company, sync from subscription events
+
+### 4. Document Custom Objects
+Your `ticket` object is undocumented. Adding descriptions helps future analysis.
+
+---
+
+## Medium-Term Actions (Next Month)
+
+### 5. Set Up Trial Tracking
+Add `trialEndsAt` to enable trial conversion campaigns
+
+### 6. Build Engagement Scoring
+Once we have more history, we can build declining engagement detection
+
+---
+
+## Your Semantic Layer Maturity
+
+| Level | Description | Your Status |
+|-------|-------------|-------------|
+| 1 | Basic CRM | ✅ Complete |
+| 2 | Lifecycle Segments | 🟡 Partial (need trial/churn timestamps) |
+| 3 | Engagement Segments | ✅ Complete |
+| 4 | Intent Signals | ✅ Complete |
+| 5 | Value Segmentation | ❌ Blocked (need ACV) |
+| 6 | Predictive Signals | ❌ Future |
+
+**Current Level: 3/6 (Engagement)**  
+**Next Milestone**: Add ACV → Level 5
+```
+
+---
+
+## Deliverables Summary
+
+| # | Deliverable | Format | Purpose |
+|---|-------------|--------|---------|
+| 1 | Workspace Discovery Report | Markdown | What data exists |
+| 2 | Semantic Mapping | YAML | How data maps to concepts |
+| 3 | Gap Analysis | Markdown | What's missing, how to fix |
+| 4 | Segment Catalog | Bird Audiences | Actual building blocks |
+| 5 | Composition Guide | Markdown | How to use segments |
+| 6 | Next Steps | Markdown | Action plan to complete |
+
+**Session Success Criteria**:
+- [ ] Discovery report generated
+- [ ] At least 5 segments created in Bird
+- [ ] All critical gaps identified with resolution paths
+- [ ] User understands their semantic layer maturity
+- [ ] Clear next steps documented
+
+---
+
 ## Next Steps
 
 1. **Review this plan** - Any adjustments to structure or phasing?
