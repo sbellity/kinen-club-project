@@ -434,96 +434,330 @@ MEETING TOUCHPOINTS (via calendars.*)
 
 **Output Artifact**: `data-gap-analysis.md` with setup recommendations
 
+### Skill 13: saas-identification-workflow (NEW - PRIORITY)
+
+**Purpose**: Convert anonymous contacts to identified profiles.
+
+**Problem Statement**: 80% of contacts (1M+) are anonymous web visitors with no email, phone, or profile data. This blocks all downstream SaaS lifecycle analysis.
+
+**Available Signals for Anonymous Contacts**:
+- `initialSource`: unknown (83%), import (9.5%), connectors (5.3%)
+- Web tracking via `web_metrics` (561k events on app.bird.com + bird.com)
+- `createdAt` for recency
+
+**Identification Strategies**:
+
+1. **Progressive Profiling**
+   - Identify high-engagement anonymous visitors (web_metrics)
+   - Target with personalized capture forms
+   - Build segments: "anonymous + high web activity"
+
+2. **Source-Based Prioritization**
+   - Prioritize `connectors` source (5.3%) - likely from integrations
+   - Prioritize `payments` source (1%) - transactional context
+   - Deprioritize `unknown` source (83%)
+
+3. **Recency Windows**
+   - Focus on recent anonymous (last 30d): high intent
+   - Archive old anonymous (>90d): low conversion potential
+
+**Workflow**:
+1. Segment anonymous contacts by source and recency
+2. Cross-reference with web_metrics for engagement signals
+3. Generate prioritized identification target list
+4. Create capture campaign segments
+5. Track conversion: anonymous → identified
+
+**Output Artifact**: `identification-priority-segments.md`
+
+**Predicates**:
+```json
+{
+  "type": "and",
+  "predicates": [
+    { "type": "field", "field": "isAnonymous", "operator": "equals", "value": true },
+    { "type": "field", "field": "createdAt", "operator": "greaterThan", "value": "now - 30 days" }
+  ]
+}
+```
+
+### Skill 14: saas-workspace-readiness (NEW)
+
+**Purpose**: Score workspace readiness for SaaS lifecycle tracking.
+
+**Readiness Dimensions**:
+
+| Dimension | Weight | Metrics |
+|-----------|--------|---------|
+| **Contact Identification** | 30% | % identified, email coverage |
+| **Customer Data** | 25% | % companies with customer flag |
+| **Lead Funnel** | 20% | % contacts with lead_stage |
+| **Engagement Data** | 15% | Messaging volume, web tracking |
+| **Channel Coverage** | 10% | Multi-channel setup |
+
+**Scoring Algorithm**:
+```
+identification_score = (identified_contacts / total_contacts) * 100
+customer_score = (customers / total_companies) * 100
+funnel_score = (staged_contacts / identified_contacts) * 100
+engagement_score = min(100, messaging_events / contacts * 10)
+channel_score = active_channels / 5 * 100
+
+readiness = (0.30 * identification_score) + 
+            (0.25 * customer_score) + 
+            (0.20 * funnel_score) + 
+            (0.15 * engagement_score) + 
+            (0.10 * channel_score)
+```
+
+**Current Workspace Score** (estimate):
+- Identification: 20% (251k/1.27M)
+- Customer: 0.17% (427/258k)
+- Funnel: 0.6% (1,429/251k identified)
+- Engagement: 85% (1M messaging events)
+- Channel: 20% (1/5 channels active)
+
+**Estimated Readiness: ~25%** - Significant data gaps for SaaS lifecycle
+
+**Workflow**:
+1. Calculate each dimension score
+2. Generate overall readiness percentage
+3. Identify top 3 gaps blocking SaaS use cases
+4. Provide prioritized recommendations
+5. Create action plan artifact
+
+**Output Artifact**: `workspace-readiness-report.md`
+
 ## Production Workspace Discovery Findings
 
 > Based on live exploration of Bird production workspace - December 11, 2025
+> Full statistics: `artifacts/discovery/workspace-statistics.md`
 
-### Available Data Sources
+### Volume Statistics
 
-| Source | Model | Records | SaaS Relevance |
-|--------|-------|---------|----------------|
-| **CRM Contacts** | `crm.contact` | 1.27M | Core individual data with lead_stage, subscriptions, reachability |
-| **CRM Companies** | `crm.company` | 258k | Account data with customer flags, tiers, ownership |
-| **Activities** | `activities.activity` | 233k | Lead (232k) and opportunity (78) actions tracked |
-| **Messaging Metrics** | `marketing.messaging_metrics` | Aggregated | Email engagement for churn signals |
-| **Web Metrics** | `marketing.web_metrics` | Aggregated | Product usage proxy |
-| **Calendar Events** | `calendars.calendar_event` | - | Meeting tracking (restricted access) |
-| **Attendees** | `calendars.calendar_event_attendee` | - | Meeting participation |
+| Model | Total | Last 30d | Last 7d | Last 24h | Growth |
+|-------|-------|----------|---------|----------|--------|
+| `crm.contact` | **1,270,675** | 739k (58%) | 85k (6.7%) | 14k | ~14k/day |
+| `crm.company` | **258,158** | 3.2k (1.2%) | 795 (0.3%) | 112 | ~100/day |
+| `activities.activity` | **232,960** | 4.2k (1.8%) | 1.1k | 162 | ~160/day |
+| `messaging_metrics` | **1,076,047** | 88k (8%) | 24k (2.3%) | 5.3k | ~5k/day |
+| `web_metrics` | **561,366** | 561k (100%) | 127k (23%) | 22k | ~22k/day |
 
-### Key SaaS-Relevant Fields Discovered
+**Temporal Range**: All data is within 8 months (April 2025 → December 2025)
 
-**On Contact**:
-- `lead_stage`: new, marketing-qualified, marketing-rejected, suspicious, enriched
-- `account_id`, `external_account_id`, `accountIds`: Account linking
-- `product_of_interest`: Product interest tracking
-- `ads_lead_score`: Lead scoring
-- `subscribedEmail/Sms/WhatsApp/Push/Rcs`: Channel preferences
-- `reachableIdentifiersFor*`: Per-channel reachability (marketing vs transactional)
+### Critical Data Quality Issues
 
-**On Company**:
-- `connectivityCustomer`: Boolean customer flag (427 true)
-- `Category_Support`: Customer tier (VIP: 46, connectivity-prio: 24, connectivity-p1: 289)
-- `accountManager`, `connectivity_am`: Ownership
-- `customerId`: External customer ID
+#### Contact Quality (1.27M contacts)
 
-### Data Gaps Identified
+| Field | Set % | Null % | Assessment |
+|-------|-------|--------|------------|
+| **isAnonymous=true** | 80.2% | - | ❌ 1M anonymous contacts |
+| emailaddress | **18.1%** | 81.9% | ❌ Very sparse |
+| phonenumber | 1.3% | 98.7% | ❌ Almost empty |
+| company | 1.3% | 98.7% | ❌ Almost empty |
+| country | 0.7% | 99.3% | ❌ Almost empty |
+| lead_stage | **0.11%** | 99.9% | ❌ Only 1,429 contacts |
+| industry | 0.3% | 99.7% | ❌ Almost empty |
 
-| Gap | Impact | Recommendation |
-|-----|--------|----------------|
-| Lead/Opportunity models not exposed | Can't query pipeline directly | Work through activities.activity |
-| No subscription object | Can't track MRR/plans | Recommend creating custom object |
-| No invoice data | Can't track revenue | Need integration |
-| No login events | Can't detect active users | Need product events |
-| Calendar access restricted | Can't analyze meetings | Need permissions |
+**Key Insight**: 80% of contacts are anonymous web visitors. Only 251k (20%) are identified.
 
-### Revised Skill Design Based on Discovery
+#### Company Quality (258k companies)
 
-#### Data Intelligence Skills (Updated)
+| Field | Set % | Null % | Assessment |
+|-------|-------|--------|------------|
+| industry | 1.7% | 98.3% | ❌ Almost empty |
+| country | 2.5% | 97.5% | ❌ Almost empty |
+| accountManager | 3.5% | 96.5% | ❌ Almost empty |
+| customerId | 1.9% | 98.1% | ❌ Almost empty |
+| connectivityCustomer | 0.17% | 99.8% | ⚠️ Only 427 marked |
 
-| Skill | Data Sources | Output |
-|-------|--------------|--------|
-| `saas-data-discovery` | All catalogs | Catalog inventory with SaaS classification |
-| `saas-data-audit` | Priority models | Quality metrics + gap analysis |
-| `saas-relationship-mapper` | Model associations | Relationship graph + missing links |
-| `saas-query-analyzer` | Model schemas | Capability matrix |
+#### Lead Stage Distribution (1,429 total / 0.11%)
 
-#### SaaS Domain Skills (Updated based on available data)
+| Stage | Count | % of Staged |
+|-------|-------|-------------|
+| new | 733 | 51% |
+| marketing-rejected | 411 | 29% |
+| marketing-qualified | 139 | 10% |
+| suspicious | 113 | 8% |
+| enriched | 33 | 2% |
 
-| Skill | Data Sources | What's Possible Now |
-|-------|--------------|---------------------|
-| `saas-customer-lifecycle` | company.connectivityCustomer, company.Category_Support | Basic customer identification |
-| `saas-lead-pipeline` | contact.lead_stage, activities (lead) | Lead funnel analysis |
-| `saas-engagement-tracker` | messaging_metrics, web_metrics | Channel engagement (not product usage) |
-| `saas-churn-detector` | messaging_metrics (declining engagement) | Email-based signals only |
-| `saas-segment-fragments` | contact attributes | Composable predicates |
-| `saas-reachability-analyzer` | contact.subscribed*, contact.reachableIdentifiersFor* | Full channel coverage |
-| `saas-meeting-analyzer` | calendars.* (if accessible) | Sales meeting tracking |
+**Key Insight**: Lead qualification is barely used. Only 0.11% of contacts have a stage.
 
-## Open Questions
+#### Customer Identification (427 companies / 0.17%)
 
-1. **Lead/Opportunity Access**: Activities reference lead and opportunity types but models aren't directly queryable. Should we build derived views from activity data?
+| Segment | Count | Notes |
+|---------|-------|-------|
+| connectivityCustomer=true | 427 | Primary customer flag |
+| Category: connectivity-p1 | 289 | P1 priority tier |
+| Category: VIP | 46 | VIP tier |
+| Category: connectivity-prio | 24 | Priority tier |
 
-2. **Customer Definition**: With only `connectivityCustomer` boolean, how do we handle:
-   - Trial customers
-   - Former customers (churned)
-   - Different product lines
+**Key Insight**: Very small identified customer base. Most company data is unqualified.
 
-3. **Product Usage**: No login/feature events available. Should skills recommend event schema?
+### Activity Breakdown
 
-4. **Calendar Permissions**: Calendar queries return 403. Is this a workspace config or API limitation?
+| Target Type | Count | % |
+|-------------|-------|---|
+| **lead** | 232,882 | 99.97% |
+| opportunity | 78 | 0.03% |
 
-5. **Multi-tenant**: Should skills adapt to workspaces with different data maturity levels?
+| Action | Count | % |
+|--------|-------|---|
+| created | 170,189 | 73.1% |
+| ownerChanged | 48,526 | 20.8% |
+| updated | 11,060 | 4.7% |
+| conversationCreated | 3,062 | 1.3% |
+| called | 121 | 0.05% |
 
-## Next Steps
+### Messaging Channel Distribution
 
-1. **Round 02**: Detail `saas-data-discovery` skill implementation
-2. **Round 03**: Detail `saas-customer-lifecycle` skill with predicate patterns
-3. **Round 04**: Detail `saas-segment-fragments` composability design
-4. **Round 05**: Integration and orchestration workflow
+| Platform | Count | % |
+|----------|-------|---|
+| **Email** | 1,022,737 | 95.0% |
+| Unknown | 53,289 | 5.0% |
+| WhatsApp | 21 | 0.002% |
+
+**Key Insight**: Email is the only active channel. SMS/WhatsApp/Push barely used.
+
+### Contact Source Distribution
+
+| Source | Count | % |
+|--------|-------|---|
+| unknown | 1,053,057 | 82.9% |
+| import | 121,078 | 9.5% |
+| connectors | 67,920 | 5.3% |
+| api | 13,122 | 1.0% |
+| payments | 12,648 | 1.0% |
+
+### Implications for SaaS Skills
+
+Based on this data reality, the skills must handle:
+
+1. **Data Sparsity**: Most fields are >95% null. Skills can't assume data exists.
+2. **Anonymous Majority**: 80% of contacts have no profile. Identification is the first challenge.
+3. **Lead Stage Gap**: Only 0.11% have lead_stage. Need alternative funnel signals.
+4. **Customer ID Gap**: Only 427 companies marked as customers. Customer lifecycle skills limited.
+5. **Single Channel**: Email is 95% of messaging. Omnichannel analysis not meaningful.
+
+### Revised Skill Design
+
+#### Data Intelligence Skills
+
+| Skill | Primary Value | Data Reality |
+|-------|---------------|--------------|
+| `workspace-discovery` | ✅ **Already built in plugins/datahub** | Works well |
+| `saas-data-audit` | Quality scoring + gap identification | High value given sparsity |
+| `saas-relationship-mapper` | Association analysis | Models exist but data sparse |
+| `saas-query-analyzer` | Capability matrix | Limited by data quality |
+
+#### SaaS Domain Skills (Adjusted for Reality)
+
+| Skill | Data Sources | Realistic Output |
+|-------|--------------|------------------|
+| `saas-customer-lifecycle` | company.connectivityCustomer (427 records) | Basic customer identification only |
+| `saas-lead-pipeline` | contact.lead_stage (1,429 records) | Very limited funnel analysis |
+| `saas-engagement-tracker` | messaging_metrics (1M+ records) | **Best signal available** |
+| `saas-churn-detector` | Email engagement decline patterns | Email-only churn signals |
+| `saas-segment-fragments` | contact attributes | Must handle sparse data |
+| `saas-reachability-analyzer` | subscription fields | Email-focused (95% of volume) |
+| `saas-identification-workflow` | **NEW** - Priority skill | Convert anonymous → identified |
+
+## Open Questions (Updated)
+
+### Resolved
+
+1. ~~**Lead/Opportunity Access**~~: Activities target `lead` (232k) and `opportunity` (78). Models not directly exposed but activity data is rich.
+
+2. ~~**Calendar Permissions**~~: 403 error confirmed. Workspace-level access control issue, not API limitation.
+
+### Critical Design Questions
+
+1. **Anonymous Majority Problem**: 80% of contacts are anonymous. Should skills:
+   - Focus only on the 20% identified contacts?
+   - Include identification workflows as a prerequisite?
+   - Report metrics separately for anonymous vs. identified?
+
+2. **Data Sparsity Handling**: Most fields are >95% null. Should skills:
+   - Fail gracefully with "insufficient data" warnings?
+   - Provide setup recommendations when data missing?
+   - Calculate coverage % and require minimum thresholds?
+
+3. **Lead Stage Reality**: Only 0.11% have lead_stage. Should skills:
+   - Use activity patterns as proxy for funnel position?
+   - Focus on contact acquisition recency instead?
+   - Recommend lead qualification workflow implementation?
+
+4. **Customer Definition**: Only 427 companies marked as customers (0.17%). Should skills:
+   - Work with this tiny dataset?
+   - Recommend customer tagging workflow first?
+   - Use engagement signals as customer proxy?
+
+5. **Single-Channel Reality**: 95% of messaging is email, WhatsApp=21. Should skills:
+   - Skip omnichannel complexity?
+   - Focus purely on email engagement?
+   - Still provide framework for future channels?
+
+### Strategic Questions
+
+6. **Skill Sequencing**: Given data gaps, should we enforce skill dependencies?
+   - `identification-workflow` must run before `customer-lifecycle`
+   - `data-audit` must run before domain skills
+   - Surface "readiness score" per skill?
+
+7. **Workspace Maturity Tiers**: Should skills adapt behavior based on data maturity?
+   - **Tier 1** (Sparse): Focus on data setup recommendations
+   - **Tier 2** (Basic): Basic segments with limited fields
+   - **Tier 3** (Rich): Full SaaS lifecycle capabilities
+
+## Key Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| **Discovery skill moved to `plugins/datahub`** | Generic capability, not SaaS-specific |
+| **Add identification workflow skill** | 80% anonymous is the primary blocker |
+| **Email-first engagement** | 95% of messaging is email |
+| **Activity-based funnel** | Lead_stage only 0.11% populated |
+| **Warn on sparse data** | Don't fail silently when fields are 95%+ null |
+
+## Revised Next Steps
+
+1. **Round 02**: `saas-identification-workflow` skill
+   - Progressive profiling strategies
+   - Anonymous → identified conversion
+   - Form capture patterns
+   
+2. **Round 03**: `saas-engagement-tracker` skill (best data available)
+   - Email engagement metrics
+   - Web activity patterns
+   - Engagement scoring from messaging_metrics
+   
+3. **Round 04**: `saas-segment-fragments` with sparse-data handling
+   - Fragments that check data availability
+   - Fallback patterns for missing fields
+   
+4. **Round 05**: `saas-customer-lifecycle` for identified subset
+   - Work with 427 identified customers
+   - Expand as more companies get tagged
 
 ## Session Artifacts
 
-- [ ] `artifacts/architecture/plugin-structure.md`
-- [ ] `artifacts/design/skill-specs.md`
-- [ ] `artifacts/design/lifecycle-model.md`
-- [ ] `artifacts/design/fragment-taxonomy.md`
+- [x] `artifacts/discovery/workspace-statistics.md` - Comprehensive statistics
+- [x] `artifacts/discovery/workspace-data-model.md` - Model inventory
+- [ ] `artifacts/design/identification-workflow.md` - Anonymous → Identified
+- [ ] `artifacts/design/engagement-scoring.md` - Email-based engagement model
+- [ ] `artifacts/design/sparse-data-patterns.md` - Handling missing data
+
+## Related Work
+
+The discovery methodology has been documented as a reusable skill:
+
+```
+plugins/datahub/
+├── skills/workspace-discovery/SKILL.md
+├── concepts/catalog-taxonomy.md
+├── concepts/model-kinds.md
+├── concepts/field-statistics.md
+└── task-guides/full-workspace-audit.md
+```
+
+This datahub plugin can be used by any vertical, not just SaaS.
