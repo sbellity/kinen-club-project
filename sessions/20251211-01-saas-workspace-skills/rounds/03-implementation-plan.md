@@ -123,47 +123,984 @@ You don't just analyze — you **guide, question, and refine** through rounds.
 ## Session Structure
 
 Sessions are organized into **phases**, each potentially spanning multiple rounds.
+Each phase produces specific **deliverables** that feed into subsequent phases.
+
+---
 
 ### Pre-Session (Silent)
-Scan workspace, prepare findings for Phase 1.
+
+**Purpose**: Automated workspace scan before first user interaction
+
+**Agent Actions**:
+- Scan all catalogs and models
+- Detect custom objects and events
+- Analyze web page patterns
+- Gather volume statistics
+- Identify SaaS-relevant fields
+
+**Deliverable**: `artifacts/discovery/pre-discovery.yaml`
+
+```yaml
+# Pre-Discovery Report (internal, not shown to user directly)
+scan_timestamp: 2025-12-11T14:30:00Z
+workspace_id: ws_xxx
+
+data_summary:
+  contacts: 1270641
+  companies: 258432
+  contact_company_linkage: 85%
+
+catalogs_found:
+  - bird:crm
+  - bird:messaging
+  - ws:default
+
+custom_objects:
+  - name: subscription
+    records: 4521
+    inferred_type: subscription
+    confidence: high
+    has_documentation: true
+  - name: ticket
+    records: 12843
+    inferred_type: support_ticket
+    confidence: medium
+    has_documentation: false
+
+custom_events:
+  - name: user-login
+    monthly_volume: 45230
+    has_contact_link: true
+    inferred_type: login
+  - name: feature-click
+    monthly_volume: 128400
+    has_contact_link: true
+    inferred_type: feature_usage
+
+web_patterns_detected:
+  purchase_intent: ["/pricing", "/upgrade", "/checkout"]
+  churn_intent: ["/cancel", "/downgrade"]
+  documentation: ["/docs/*", "/help/*"]
+
+saas_fields_found:
+  on_contact: []
+  on_company: ["connectivityCustomer"]
+
+detected_business_model:
+  type: B2B SaaS
+  confidence: high
+  signals:
+    - company_contact_linkage > 80%
+    - subscription_object_exists
+    - login_events_tracked
+```
+
+---
 
 ### Phase 1: Foundation (1-2 rounds)
-- Validate business model
-- Confirm customer definition  
-- Identify priority use cases
-- *May need follow-up round for complex business models*
+
+**Purpose**: Validate business context and establish session goals
+
+**Topics**:
+- Business model validation (B2B/B2C/PLG/hybrid)
+- Customer definition (what makes someone a "customer")
+- Enterprise/value tier definition
+- Priority use cases (churn, win-back, expansion, etc.)
+
+**Deliverable**: `artifacts/business-context.yaml`
+
+```yaml
+# Business Context (updated after Phase 1)
+confirmed_at: 2025-12-11T15:00:00Z
+
+business_model:
+  type: B2B SaaS
+  sales_motion: hybrid  # sales-led enterprise, PLG SMB
+  validated: true
+
+customer_definition:
+  entity: company  # not contact
+  source: subscription.status
+  active_value: "active"
+  notes: "A company is a customer if they have an active subscription"
+
+enterprise_definition:
+  method: acv_threshold  # or plan_tier, employee_count, manual
+  threshold: 50000
+  field: company.acv  # MISSING - flagged for gap analysis
+  fallback: "company.employees > 500"
+
+priority_use_cases:
+  - id: churn_prevention
+    priority: 1
+    description: "Identify and save at-risk customers"
+  - id: winback
+    priority: 2
+    description: "Re-engage churned customers"
+  - id: expansion
+    priority: 3
+    description: "Upsell engaged customers"
+
+custom_object_semantics:
+  subscription: "Customer subscription records - tracks plan, status, MRR"
+  ticket: "Support tickets - customer issues and requests"
+```
+
+---
 
 ### Phase 2: Data Landscape (1-3 rounds)
-- Explore custom objects and their semantics
-- Understand custom events and their meaning
-- Document field purposes and relationships
-- *Complex workspaces may need multiple rounds*
+
+**Purpose**: Document all relevant data with business meaning
+
+**Topics**:
+- Custom object deep dive (fields, purposes, relationships)
+- Custom event semantics (what triggers them, what they mean)
+- Key field documentation
+- Association mapping
+
+**Deliverable**: `artifacts/data-inventory.yaml`
+
+```yaml
+# Data Inventory (updated after Phase 2)
+documented_at: 2025-12-11T15:30:00Z
+
+custom_objects:
+  subscription:
+    description: "Customer subscription records"
+    record_count: 4521
+    key_fields:
+      - path: status
+        type: string
+        values: [active, cancelled, paused, trial]
+        purpose: "Current subscription state"
+      - path: plan
+        type: string
+        values: [starter, pro, enterprise]
+        purpose: "Subscription tier"
+      - path: mrr
+        type: number
+        purpose: "Monthly recurring revenue"
+        coverage: 98%
+      - path: startDate
+        type: timestamp
+        purpose: "When subscription began"
+    associations:
+      - to: crm.company
+        via: companyId
+        cardinality: many-to-one
+    saas_relevance: critical
+    
+  ticket:
+    description: "Support tickets for customer issues"
+    record_count: 12843
+    key_fields:
+      - path: status
+        values: [open, in_progress, resolved, closed]
+      - path: priority
+        values: [low, medium, high, urgent]
+      - path: createdAt
+        type: timestamp
+    associations:
+      - to: crm.contact
+        via: contactId
+    saas_relevance: medium
+    notes: "High ticket volume may indicate churn risk"
+
+custom_events:
+  user-login:
+    description: "Product login events"
+    monthly_volume: 45230
+    fields:
+      - userId (links to contact)
+      - timestamp
+      - device
+    saas_relevance: critical
+    enables: [active_users, power_users, dormant_detection]
+    
+  feature-click:
+    description: "Feature usage tracking"
+    monthly_volume: 128400
+    fields:
+      - userId
+      - featureName
+      - timestamp
+    saas_relevance: critical
+    enables: [feature_adoption, engagement_scoring]
+
+web_patterns:
+  documented:
+    - pattern: "/pricing/*"
+      behavior: purchase_intent
+      monthly_views: 8400
+    - pattern: "/cancel"
+      behavior: churn_intent
+      monthly_views: 234
+      priority: critical
+  needs_classification:
+    - pattern: "/workspace/*"
+      pages: 234
+      question: "Is this product usage or marketing site?"
+
+associations_map:
+  contact_to_company: defined (85% coverage)
+  subscription_to_company: defined
+  ticket_to_contact: defined
+  login_to_contact: implicit (via userId)
+```
+
+---
 
 ### Phase 3: Concept Mapping (2-3 rounds)
-- Define lifecycle thresholds
-- Define engagement metrics
-- Define intent signals
-- Define value tiers
-- *Each domain may warrant its own round*
+
+**Purpose**: Define SaaS concepts with user-validated thresholds
+
+**Topics**:
+- Lifecycle concepts (active, churned, trial)
+- Engagement concepts (active user, power user, dormant)
+- Intent signals (purchase, churn, expansion)
+- Value segmentation (enterprise, SMB)
+
+**Deliverable**: `artifacts/semantic-mapping.yaml`
+
+```yaml
+# Semantic Mapping (updated after Phase 3)
+defined_at: 2025-12-11T16:00:00Z
+
+domains:
+  lifecycle:
+    active_customers:
+      status: defined
+      definition: "Company with subscription.status = active"
+      predicate:
+        type: relatedEntity
+        entityType: subscription
+        predicate:
+          type: attribute
+          attribute: status
+          operator: equals
+          value: active
+          
+    churned_customers:
+      status: defined
+      definition: "Company with subscription.status = cancelled"
+      predicate:
+        type: relatedEntity
+        entityType: subscription
+        predicate:
+          type: attribute
+          attribute: status
+          operator: equals
+          value: cancelled
+      limitation: "Cannot filter by churn date (missing churnedAt)"
+      
+    trial_users:
+      status: blocked
+      missing: "subscription.trialEndsAt OR company.trialEndsAt"
+      
+  engagement:
+    active_users_7d:
+      status: defined
+      definition: "Contact with user-login event in last 7 days"
+      threshold: 7 days
+      threshold_rationale: "User confirmed weekly active is meaningful"
+      predicate:
+        type: event
+        eventType: custom-event.user-login
+        timeWindow: { value: 7, unit: days }
+        
+    active_users_30d:
+      status: defined
+      definition: "Contact with user-login event in last 30 days"
+      threshold: 30 days
+      
+    power_users:
+      status: defined
+      definition: "Contact with 10+ logins in last 30 days"
+      threshold: 10 logins
+      threshold_rationale: "User confirmed based on their product usage patterns"
+      predicate:
+        type: event
+        eventType: custom-event.user-login
+        aggregation: { function: count, operator: gte, value: 10 }
+        timeWindow: { value: 30, unit: days }
+        
+    dormant_users:
+      status: defined
+      definition: "Customer contact with no login in 30+ days"
+      threshold: 30 days
+      predicate:
+        type: and
+        predicates:
+          - { type: relatedEntity, entityType: subscription, ... }  # Is customer
+          - { type: not, predicate: { type: event, eventType: user-login, timeWindow: 30d } }
+          
+  intent:
+    purchase_intent:
+      status: defined
+      definition: "Visited pricing, upgrade, or checkout pages in last 14 days"
+      pages: ["/pricing", "/upgrade", "/checkout", "/subscribe"]
+      time_window: 14 days
+      
+    churn_intent:
+      status: defined
+      definition: "Visited cancel or downgrade pages in last 30 days"
+      pages: ["/cancel", "/downgrade", "/close-account"]
+      time_window: 30 days
+      priority: critical
+      
+  value:
+    enterprise_customers:
+      status: blocked
+      definition: "Company with ACV > $50,000"
+      missing: "company.acv field"
+      workaround: "Using company.employees > 500 as proxy"
+      workaround_quality: low
+```
+
+---
 
 ### Phase 4: Gap Analysis (1-2 rounds)
-- Identify blockers for each concept
+
+**Purpose**: Identify blockers and plan resolutions
+
+**Topics**:
+- List all blocked concepts
 - Discuss workarounds vs. proper fixes
-- Prioritize resolutions
-- *May need follow-up for complex data source discussions*
+- Map data sources for missing fields
+- Prioritize resolution actions
+
+**Deliverable**: `artifacts/gap-analysis.md`
+
+```markdown
+# Gap Analysis Report
+
+Generated: 2025-12-11T16:30:00Z
+
+## Summary
+
+| Domain | Defined | Blocked | Coverage |
+|--------|---------|---------|----------|
+| Lifecycle | 2 | 1 | 67% |
+| Engagement | 4 | 0 | 100% ✅ |
+| Intent | 2 | 0 | 100% ✅ |
+| Value | 0 | 2 | 0% ❌ |
+| Reachability | 3 | 1 | 75% |
+
+**Overall Semantic Coverage: 68%**
+
+---
+
+## Critical Gaps
+
+### Gap 1: No Value Segmentation (Priority: HIGH)
+
+**Blocked Concepts**: Enterprise Customers, SMB Customers, High-Value Churned
+**Impact**: Cannot prioritize by customer value
+
+**Root Cause**: Missing `acv` field on company
+
+**Resolution Options**:
+| Option | Effort | Data Source | Recommendation |
+|--------|--------|-------------|----------------|
+| Add company.acv | Low | Billing system | ✅ Recommended |
+| Use subscription.plan tier | Medium | Already exists | Alternative |
+| Use employee count proxy | None | Exists | ⚠️ Low quality |
+
+**Resolution Plan**:
+1. Export ACV from billing system (Stripe/Chargebee/etc.)
+2. Add `acv` field to company schema
+3. Set up sync or one-time import
+4. Define threshold: ACV > $50,000 = Enterprise
+
+---
+
+### Gap 2: No Churn Timestamp (Priority: MEDIUM)
+
+**Blocked Concepts**: Recently Churned, Churned in Period
+**Impact**: Cannot do time-based win-back campaigns
+
+**Root Cause**: Missing `churnedAt` timestamp
+
+**Resolution Options**:
+| Option | Effort | Recommendation |
+|--------|--------|----------------|
+| Add company.churnedAt | Medium | ✅ Recommended |
+| Derive from subscription events | High | Complex |
+
+---
+
+## Gaps by Priority
+
+| Priority | Gap | Blocked Segments | Resolution Effort |
+|----------|-----|------------------|-------------------|
+| HIGH | No ACV field | 3 segments | Low |
+| MEDIUM | No churnedAt | 2 segments | Medium |
+| LOW | No trial tracking | 1 segment | Medium |
+```
+
+---
 
 ### Phase 5: Segment Catalog (1-2 rounds)
-- Finalize segment definitions
-- Agree on naming conventions
-- Confirm folder organization
-- Review predicates before creation
+
+**Purpose**: Finalize segment definitions before creation
+
+**Topics**:
+- Review all segment definitions
+- Confirm naming conventions
+- Agree on folder structure
+- Final predicate review
+
+**Deliverable**: `artifacts/segment-catalog.yaml`
+
+```yaml
+# Segment Catalog (ready for creation)
+finalized_at: 2025-12-11T17:00:00Z
+
+folder_structure:
+  root: "SaaS Semantic Layer"
+  subfolders:
+    - Lifecycle
+    - Engagement
+    - Intent
+    - Value
+    - Behavioral
+
+naming_convention: "[Domain] Segment Name"
+
+segments_to_create:
+  - name: "[Lifecycle] Active Customers"
+    folder: Lifecycle
+    description: |
+      Companies with active subscriptions.
+      Part of SaaS Semantic Layer - use as building block.
+    predicate:
+      type: relatedEntity
+      entityType: subscription
+      predicate:
+        type: attribute
+        attribute: status
+        operator: equals
+        value: active
+    priority: 1
+    
+  - name: "[Lifecycle] Churned Customers"
+    folder: Lifecycle
+    description: |
+      Companies with cancelled subscriptions.
+      Part of SaaS Semantic Layer - combine with engagement segments for win-back.
+    predicate: { ... }
+    priority: 2
+    
+  - name: "[Engagement] Active Users (7d)"
+    folder: Engagement
+    description: |
+      Contacts who logged in within last 7 days.
+      Use for engagement monitoring and health scoring.
+    predicate:
+      type: event
+      eventType: custom-event.user-login
+      timeWindow: { value: 7, unit: days }
+    priority: 3
+    
+  - name: "[Engagement] Power Users"
+    folder: Engagement
+    description: |
+      Contacts with 10+ logins in last 30 days.
+      High engagement - expansion and advocacy targets.
+    predicate: { ... }
+    priority: 4
+    
+  - name: "[Intent] Showed Churn Intent ⚠️"
+    folder: Intent
+    description: |
+      CRITICAL: Contacts who visited cancel/downgrade pages.
+      Monitor daily - immediate retention intervention needed.
+    predicate: { ... }
+    priority: 1  # Create first
+    
+  # ... all other segments
+
+segments_blocked:
+  - name: "[Value] Enterprise Customers"
+    blocked_by: "Gap 1: No ACV field"
+    create_when: "After ACV field is added"
+    
+  - name: "[Lifecycle] Recently Churned (90d)"
+    blocked_by: "Gap 2: No churnedAt timestamp"
+    create_when: "After churnedAt field is added"
+
+total_segments:
+  ready: 12
+  blocked: 4
+```
+
+---
 
 ### Phase 6: Implementation (1 round)
-- Create Bird audiences
-- Generate documentation
+
+**Purpose**: Create audiences and finalize documentation
+
+**Actions**:
+- Create Bird audiences from segment catalog
+- Verify each audience was created successfully
+- Generate final documentation
 - Define next steps
 
-**Typical session: 8-12 rounds total**
+**Deliverables**:
+
+#### 1. Created Audiences (in Bird)
+
+```
+📁 SaaS Semantic Layer/
+├── 📁 Lifecycle/
+│   ├── ✅ [Lifecycle] Active Customers
+│   └── ✅ [Lifecycle] Churned Customers
+├── 📁 Engagement/
+│   ├── ✅ [Engagement] Active Users (7d)
+│   ├── ✅ [Engagement] Active Users (30d)
+│   ├── ✅ [Engagement] Power Users
+│   └── ✅ [Engagement] Dormant Users
+├── 📁 Intent/
+│   ├── ✅ [Intent] Showed Churn Intent ⚠️
+│   ├── ✅ [Intent] Showed Purchase Intent
+│   └── ✅ [Intent] Viewing Pricing
+└── 📁 Behavioral/
+    ├── ✅ [Behavioral] Documentation Readers
+    └── ✅ [Behavioral] Blog Readers
+```
+
+#### 2. Session Summary: `session-summary.md`
+
+```markdown
+# SaaS Semantic Layer Session Summary
+
+Session: 2025-12-11
+Rounds Completed: 11
+Duration: ~2 hours
+
+## What We Built
+
+Created **12 audience segments** as composable building blocks:
+- 2 Lifecycle segments
+- 4 Engagement segments  
+- 3 Intent segments
+- 3 Behavioral segments
+
+## Key Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Customer = company with active subscription | Matches business model |
+| Power user = 10+ logins/30d | Based on product usage patterns |
+| Enterprise = ACV > $50K | Standard threshold for sales team |
+
+## Semantic Coverage
+
+| Domain | Coverage |
+|--------|----------|
+| Lifecycle | 67% (1 blocked) |
+| Engagement | 100% ✅ |
+| Intent | 100% ✅ |
+| Value | 0% (needs ACV) |
+
+## Composition Examples
+
+| Use Case | Composition |
+|----------|-------------|
+| Churn Prevention | Active Customers ∩ Showed Churn Intent |
+| Win-back | Churned Customers ∩ Was Power User |
+| Expansion | Active Customers ∩ Power Users ∩ Purchase Intent |
+
+## Next Steps
+
+### Immediate (This Week)
+1. ⚠️ Monitor "Showed Churn Intent" segment daily
+2. Add ACV field to company (unblocks value segments)
+
+### Short-term (2 Weeks)
+3. Add churnedAt timestamp (unblocks time-based win-back)
+4. Create first campaign using semantic layer
+
+### Medium-term (1 Month)
+5. Add trial tracking
+6. Build engagement scoring model
+```
+
+#### 3. Composition Guide: `artifacts/composition-guide.md`
+
+*(As defined in deliverables section)*
+
+---
+
+---
+
+## Session Filesystem Structure
+
+```
+sessions/<session-id>/
+├── CLAUDE.md                           # Session instructions
+├── brief.md                            # Initial user request
+├── metadata.json                       # Session metadata
+│
+├── rounds/                             # Kinen rounds (Q&A)
+│   ├── 01-foundation.md
+│   ├── 02-data-landscape.md
+│   ├── 03-custom-objects.md
+│   ├── 04-lifecycle-mapping.md
+│   ├── 05-engagement-mapping.md
+│   ├── 06-gap-analysis.md
+│   ├── 07-segment-definitions.md
+│   └── 08-implementation.md
+│
+├── artifacts/                          # Working documents
+│   ├── discovery/
+│   │   ├── pre-discovery.yaml          # Silent scan results
+│   │   └── data-inventory.yaml         # Documented data model
+│   ├── context/
+│   │   └── business-context.yaml       # Validated business model
+│   ├── mapping/
+│   │   └── semantic-mapping.yaml       # Concept definitions
+│   ├── analysis/
+│   │   └── gap-analysis.md             # Blockers and resolutions
+│   └── catalog/
+│       ├── segment-catalog.yaml        # Segment definitions
+│       └── composition-guide.md        # How to use segments
+│
+├── bundle/                             # DEPLOYABLE OUTPUTS
+│   ├── manifest.yaml                   # What to deploy
+│   ├── audiences/                      # Audience definitions
+│   │   ├── lifecycle/
+│   │   │   ├── active-customers.json
+│   │   │   └── churned-customers.json
+│   │   ├── engagement/
+│   │   │   ├── active-users-7d.json
+│   │   │   ├── power-users.json
+│   │   │   └── dormant-users.json
+│   │   └── intent/
+│   │       ├── churn-intent.json
+│   │       └── purchase-intent.json
+│   ├── datahub/                        # DataHub resources
+│   │   ├── models/
+│   │   │   └── computed-fields.yaml    # New computed fields
+│   │   ├── associations/
+│   │   │   └── new-associations.yaml   # New model associations
+│   │   └── views/
+│   │       └── saas-views.yaml         # DataHub views
+│   └── recommendations/                # Manual actions needed
+│       ├── schema-changes.md           # Fields to add manually
+│       └── data-sources.md             # Connectors to set up
+│
+└── session-summary.md                  # Final summary
+```
+
+---
+
+## Deployable Bundle Structure
+
+The `bundle/` directory contains everything that can be deployed to the workspace.
+
+### Bundle Manifest
+
+```yaml
+# bundle/manifest.yaml
+version: "1.0"
+session_id: "saas-semantic-layer-2025-12-11"
+workspace_id: "ws_xxx"
+generated_at: "2025-12-11T17:00:00Z"
+
+deployment:
+  audiences:
+    total: 12
+    by_folder:
+      "SaaS Semantic Layer/Lifecycle": 2
+      "SaaS Semantic Layer/Engagement": 4
+      "SaaS Semantic Layer/Intent": 3
+      "SaaS Semantic Layer/Behavioral": 3
+      
+  datahub:
+    computed_fields: 2
+    associations: 1
+    views: 3
+    
+  manual_actions_required: 2
+
+status:
+  ready_to_deploy:
+    - audiences (12)
+    - datahub views (3)
+  requires_manual_setup:
+    - company.acv field
+    - company.churnedAt field
+```
+
+### Audience Definitions
+
+```json
+// bundle/audiences/engagement/power-users.json
+{
+  "name": "[Engagement] Power Users",
+  "folder": "SaaS Semantic Layer/Engagement",
+  "description": "Contacts with 10+ logins in last 30 days.\nHigh engagement - expansion and advocacy targets.\n\nPart of SaaS Semantic Layer. Compose with other segments.",
+  "entityType": "contact",
+  "predicate": {
+    "type": "event",
+    "eventType": "custom-event.user-login",
+    "aggregation": {
+      "function": "count",
+      "operator": "gte",
+      "value": 10
+    },
+    "timeWindow": {
+      "value": 30,
+      "unit": "days"
+    }
+  },
+  "metadata": {
+    "semantic_layer": true,
+    "domain": "engagement",
+    "threshold_rationale": "Confirmed by user based on product usage patterns",
+    "created_by_session": "saas-semantic-layer-2025-12-11"
+  }
+}
+```
+
+### DataHub Resources
+
+#### Computed Fields
+
+```yaml
+# bundle/datahub/models/computed-fields.yaml
+# New computed fields to add to existing models
+
+computed_fields:
+  - model: crm.company
+    fields:
+      - name: customerStatus
+        type: string
+        computation: |
+          CASE 
+            WHEN EXISTS(subscription WHERE status = 'active') THEN 'customer'
+            WHEN EXISTS(subscription WHERE status = 'cancelled') THEN 'churned'
+            WHEN EXISTS(subscription WHERE status = 'trial') THEN 'trial'
+            ELSE 'prospect'
+          END
+        description: "Derived customer lifecycle status"
+        
+      - name: daysSinceLastLogin
+        type: number
+        computation: "DATEDIFF(NOW(), MAX(user_login.timestamp))"
+        description: "Days since any contact at this company logged in"
+        requires: "Association: company → contact → user-login events"
+
+status: pending_manual_review
+note: "Computed fields require DataHub admin to implement"
+```
+
+#### New Associations
+
+```yaml
+# bundle/datahub/associations/new-associations.yaml
+# Recommended new associations between models
+
+associations:
+  - name: subscription_to_company
+    from: custom-object.subscription
+    to: crm.company
+    via: companyId
+    cardinality: many-to-one
+    status: exists  # Already defined
+    
+  - name: login_events_to_contact
+    from: custom-event.user-login
+    to: crm.contact
+    via: userId
+    cardinality: many-to-one
+    status: recommended
+    rationale: "Enables engagement tracking per contact"
+    
+  - name: ticket_to_company
+    from: custom-object.ticket
+    to: crm.company
+    via: contact.companyId  # Through contact
+    cardinality: many-to-one
+    status: recommended
+    rationale: "Enables company-level support analysis"
+```
+
+#### DataHub Views
+
+```yaml
+# bundle/datahub/views/saas-views.yaml
+# Pre-built views for common SaaS queries
+
+views:
+  - name: company_health_summary
+    description: "Company health metrics for SaaS analysis"
+    base_model: crm.company
+    query: |
+      select:
+        name,
+        attributes.customerStatus,
+        subscription.plan,
+        subscription.mrr,
+        contact_count is contacts.count(),
+        active_users_7d is contacts.count() { 
+          where: EXISTS(user_login WHERE timestamp > now - 7 day) 
+        },
+        last_login is MAX(contacts.user_login.timestamp),
+        open_tickets is tickets.count() { where: status = 'open' }
+      where: subscription.status = 'active'
+      order_by: mrr desc
+    use_case: "Customer health dashboard"
+    
+  - name: engagement_trends
+    description: "Weekly engagement trends by company"
+    base_model: crm.company
+    query: |
+      group_by: 
+        week is WEEK(user_login.timestamp)
+      aggregate:
+        companies_active is count(distinct companyId),
+        total_logins is count(),
+        avg_logins_per_company is count() / count(distinct companyId)
+      order_by: week desc
+      limit: 12
+    use_case: "Engagement trend analysis"
+    
+  - name: churn_risk_signals
+    description: "Companies showing churn risk signals"
+    base_model: crm.company
+    query: |
+      select:
+        name,
+        subscription.mrr,
+        days_since_login is DATEDIFF(NOW(), MAX(contacts.user_login.timestamp)),
+        churn_page_visits is contacts.web_metrics.count() {
+          where: pagePath ~ 'cancel|downgrade'
+        },
+        open_tickets is tickets.count() { where: status = 'open' }
+      where: 
+        subscription.status = 'active'
+        AND (days_since_login > 14 OR churn_page_visits > 0 OR open_tickets > 2)
+      order_by: mrr desc
+    use_case: "Proactive churn prevention"
+```
+
+### Manual Actions Required
+
+```markdown
+# bundle/recommendations/schema-changes.md
+
+# Schema Changes Required
+
+These changes must be made manually in DataHub before 
+some segments can be created.
+
+## Priority 1: Add ACV Field
+
+**Model**: crm.company
+**Field**: `attributes.acv`
+**Type**: number
+**Description**: Annual Contract Value in USD
+
+**Data Source Options**:
+1. Stripe: Export from subscription metadata
+2. Chargebee: Use contract_value field
+3. Salesforce: Sync from Opportunity.Amount
+
+**Unblocks**:
+- [Value] Enterprise Customers
+- [Value] SMB Customers  
+- [Value] High-Value Churned
+
+---
+
+## Priority 2: Add Churn Timestamp
+
+**Model**: crm.company
+**Field**: `attributes.churnedAt`
+**Type**: timestamp
+**Description**: When the company churned (subscription cancelled)
+
+**Population Strategy**:
+- Set when subscription.status changes to 'cancelled'
+- Backfill from subscription.updatedAt where status = cancelled
+
+**Unblocks**:
+- [Lifecycle] Recently Churned (90d)
+- Time-based win-back campaigns
+```
+
+---
+
+## Deployment Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         DEPLOYMENT FLOW                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  SESSION COMPLETE                                                           │
+│        │                                                                    │
+│        ▼                                                                    │
+│  ┌─────────────────┐                                                       │
+│  │  bundle/        │                                                       │
+│  │  manifest.yaml  │                                                       │
+│  └────────┬────────┘                                                       │
+│           │                                                                 │
+│           ├──────────────────┬──────────────────┬──────────────────┐       │
+│           ▼                  ▼                  ▼                  ▼       │
+│  ┌────────────────┐ ┌────────────────┐ ┌────────────────┐ ┌─────────────┐ │
+│  │   AUDIENCES    │ │  DATAHUB VIEWS │ │  ASSOCIATIONS  │ │   MANUAL    │ │
+│  │   (Auto)       │ │   (Auto)       │ │   (Review)     │ │   ACTIONS   │ │
+│  └────────┬───────┘ └────────┬───────┘ └────────┬───────┘ └──────┬──────┘ │
+│           │                  │                  │                 │        │
+│           ▼                  ▼                  ▼                 ▼        │
+│  ┌────────────────────────────────────────────────────────────────────┐   │
+│  │                      BIRD WORKSPACE                                │   │
+│  │                                                                    │   │
+│  │  Engagements:                                                     │   │
+│  │  └── Audiences/                                                   │   │
+│  │      └── SaaS Semantic Layer/                                     │   │
+│  │          ├── Lifecycle/ (2 audiences)                             │   │
+│  │          ├── Engagement/ (4 audiences)                            │   │
+│  │          ├── Intent/ (3 audiences)                                │   │
+│  │          └── Behavioral/ (3 audiences)                            │   │
+│  │                                                                    │   │
+│  │  DataHub:                                                         │   │
+│  │  └── Views/                                                       │   │
+│  │      ├── company_health_summary                                   │   │
+│  │      ├── engagement_trends                                        │   │
+│  │      └── churn_risk_signals                                       │   │
+│  │                                                                    │   │
+│  │  (Pending manual setup):                                          │   │
+│  │  └── company.acv, company.churnedAt                              │   │
+│  │                                                                    │   │
+│  └────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Phase Deliverables Summary
+
+| Phase | Rounds | Artifact | Deployable Output |
+|-------|--------|----------|-------------------|
+| Pre-Session | 0 | `discovery/pre-discovery.yaml` | — |
+| **Phase 1** | 1-2 | `context/business-context.yaml` | — |
+| **Phase 2** | 1-3 | `discovery/data-inventory.yaml` | — |
+| **Phase 3** | 2-3 | `mapping/semantic-mapping.yaml` | — |
+| **Phase 4** | 1-2 | `analysis/gap-analysis.md` | `bundle/recommendations/` |
+| **Phase 5** | 1-2 | `catalog/segment-catalog.yaml` | `bundle/audiences/` |
+| **Phase 6** | 1 | `session-summary.md` | `bundle/datahub/` |
+
+**Total Bundle Contents**:
+- 12+ audience definitions (JSON)
+- 3 DataHub views (YAML)
+- 1-2 association recommendations (YAML)
+- 2-3 computed field specs (YAML)
+- Manual action guides (Markdown)
 
 ## Round Format
 
