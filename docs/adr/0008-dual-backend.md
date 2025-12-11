@@ -69,3 +69,4 @@ func (d *DualStorage) Search(ctx context.Context, query SearchQuery) ([]Result, 
 - [ADR-004: Separate Storage Interfaces](0004-separate-storage-interfaces.md)
 
 
+

@@ -55,3 +55,4 @@ func (s *storageAdapter) Insert(ctx context.Context, entries []interface{}) erro
 - [ADR-007: On-Demand IndexWorker](0007-on-demand-indexworker.md)
 
 
+

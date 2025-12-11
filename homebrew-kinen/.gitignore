@@ -1,0 +1,7 @@
+# Homebrew tap standard ignores
+*.swp
+*.swo
+*~
+.DS_Store
+
+

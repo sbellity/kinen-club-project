@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${VERSION#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build binaries
+        run: make build-all
+
+      - name: Package binaries
+        run: make package
+
+      - name: Display checksums
+        run: |
+          cat dist/checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: Release ${{ steps.get_version.outputs.tag }}
+          body: |
+            Release ${{ steps.get_version.outputs.tag }}
+
+            ## Binaries
+
+            - `kinen-darwin-arm64.tar.gz` - macOS Apple Silicon
+            - `kinen-darwin-amd64.tar.gz` - macOS Intel
+            - `kinen-linux-amd64.tar.gz` - Linux x86_64
+            - `kinen-daemon-darwin-arm64.tar.gz` - macOS Apple Silicon daemon
+            - `kinen-daemon-darwin-amd64.tar.gz` - macOS Intel daemon
+            - `kinen-daemon-linux-amd64.tar.gz` - Linux x86_64 daemon
+
+            ## Installation
+
+            ### Homebrew (macOS)
+            ```bash
+            brew tap sbellity/kinen
+            brew install kinen-daemon
+            brew services start kinen-daemon
+            ```
+
+            ### Manual Installation
+            1. Download the appropriate binary for your platform
+            2. Extract: `tar -xzf kinen-*.tar.gz`
+            3. Move to PATH: `sudo mv kinen-* /usr/local/bin/kinen`
+
+            ## Checksums
+
+            See checksums.txt file attached to this release.
+          files: |
+            dist/*.tar.gz
+            dist/checksums.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+

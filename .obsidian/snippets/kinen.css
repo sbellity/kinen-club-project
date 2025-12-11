@@ -1,0 +1,85 @@
+/* Custom Obsidian Callout CSS for Kinen Options
+ * 
+ * To use this:
+ * 1. Copy this file to your Obsidian vault: .obsidian/snippets/kinen-options.css
+ * 2. Enable it in Settings > Appearance > CSS Snippets
+ * 3. Use `> [!option]` in your markdown files
+ */
+
+/* Option Callout - Distinct color for choices/options */
+.callout[data-callout='option'] {
+  --callout-color: 100, 150, 255;  /* Blue - distinct from note (yellow) */
+  --callout-icon: lucide-circle-dot;  /* Dot icon for options */
+}
+
+/* Alternative: Use a different icon/color */
+/* 
+.callout[data-callout='option'] {
+  --callout-color: 150, 100, 255;  /* Purple */
+  --callout-icon: lucide-check-circle-2;  /* Check circle */
+}
+*/
+
+/* Alternative: Use choice/decision icon */
+/*
+.callout[data-callout='option'] {
+  --callout-color: 100, 200, 150;  /* Green */
+  --callout-icon: lucide-git-branch;  /* Branch icon for choices */
+}
+*/
+
+/* Make options visually distinct from answers */
+.callout[data-callout='note'] {
+  --callout-color: 255, 200, 50;  /* Yellow for answers */
+  --callout-icon: lucide-lightbulb;  /* Lightbulb for answers */
+}
+
+/* Optional: Custom styling for option callouts */
+.callout[data-callout='option'] {
+  border-left-width: 4px;
+  border-left-color: rgb(var(--callout-color));
+}
+
+/* Optional: Different background tint for options */
+.callout[data-callout='option'] .callout-content {
+  background-color: rgba(var(--callout-color), 0.05);
+}
+
+/* Task List Options - Remove strikethrough when checked
+ * 
+ * This allows using `- [x] **Option A**: Description` format
+ * without the strikethrough that Obsidian normally applies to checked tasks.
+ * 
+ * Usage: Use task list format for options, but they won't get strikethrough when checked.
+ */
+
+/* Method 1: CSS Variable (Simplest - affects all checked tasks globally) */
+body {
+  --checklist-done-decoration: none;
+}
+
+/* Method 2: Specific selectors for preview mode */
+.markdown-preview-view ul > li.task-list-item.is-checked,
+.markdown-preview-view ol > li.task-list-item.is-checked {
+  text-decoration: none !important;
+  color: var(--text-normal) !important;
+}
+
+/* Method 3: Specific selectors for live preview/edit mode (CM6) */
+.markdown-source-view.mod-cm6 .HyperMD-task-line[data-task]:not([data-task=" "]) {
+  text-decoration: none !important;
+  color: var(--text-normal) !important;
+}
+
+/* Remove strikethrough from all text within checked items (both modes) */
+.task-list-item.is-checked *,
+.HyperMD-task-line[data-task]:not([data-task=" "]) * {
+  text-decoration: none !important;
+}
+
+/* Specifically target bold text (option labels) - keep slight dimming for visual feedback */
+.task-list-item.is-checked strong,
+.HyperMD-task-line[data-task]:not([data-task=" "]) strong {
+  text-decoration: none !important;
+  opacity: 0.85;
+}

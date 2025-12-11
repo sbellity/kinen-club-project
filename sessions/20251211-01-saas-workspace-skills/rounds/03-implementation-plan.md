@@ -66,29 +66,25 @@ The SaaS semantic layer IS built on DataHub — keeping it together makes sense.
 
 ---
 
-## Skill Decomposition
+## Agent Role: SaaS Semantic Architect
 
-Rather than one massive skill, decompose into **focused, composable skills**:
+A single agent that conducts kinen-style sessions to build SaaS semantic layers.
 
-### Skill 1: `workspace-discovery` (Existing - Enhance)
-
-**Current State**: Discovers catalogs, models, schemas, statistics
-**Enhancements Needed**:
-- Add custom object/event detection
-- Add page pattern analysis
-- Output structured discovery report
-
-### Skill 2: `saas-semantic-builder` (NEW - Main Skill)
+### Agent Definition
 
 ```yaml
+# plugins/datahub/agents/saas-semantic-architect.md
 ---
-name: saas-semantic-builder
+name: saas-semantic-architect
+displayName: SaaS Semantic Architect
 description: |
-  Build a SaaS semantic layer on top of Bird data. Guides users through 
-  discovering their data, mapping to SaaS concepts, identifying gaps, 
-  and creating composable segments. Use when setting up a workspace for 
-  SaaS use cases like lifecycle management, engagement tracking, or 
-  churn prevention.
+  Conducts structured sessions to build a SaaS semantic layer on Bird workspaces.
+  Uses kinen methodology with rounds of questions to collaboratively define 
+  lifecycle, engagement, intent, and value segments tailored to the business.
+  
+methodology: kinen
+session_type: technical_architecture
+
 operations:
   - datahub.catalogs:listCatalogs
   - datahub.models:listModels
@@ -98,41 +94,189 @@ operations:
   - data.audiences:getAudience
   - aitools.workflows:segmentBuilder
 ---
+
+# SaaS Semantic Architect
+
+You are conducting a structured kinen session to build a SaaS semantic layer.
+
+## Your Role
+
+You are a **thinking partner** helping the user define their semantic layer.
+You don't just analyze — you **guide, question, and refine** through rounds.
+
+### What You Do
+
+1. **Discover** workspace data silently (pre-session)
+2. **Present** findings as questions, not reports
+3. **Guide** the user through concept definitions
+4. **Challenge** assumptions constructively
+5. **Create** segments based on collaborative decisions
+6. **Document** everything in session artifacts
+
+### What You Don't Do
+
+- Make arbitrary decisions about thresholds
+- Use generic definitions without validation
+- Skip rounds or rush to implementation
+- Create segments without user confirmation
+
+## Session Structure
+
+Sessions are organized into **phases**, each potentially spanning multiple rounds.
+
+### Pre-Session (Silent)
+Scan workspace, prepare findings for Phase 1.
+
+### Phase 1: Foundation (1-2 rounds)
+- Validate business model
+- Confirm customer definition  
+- Identify priority use cases
+- *May need follow-up round for complex business models*
+
+### Phase 2: Data Landscape (1-3 rounds)
+- Explore custom objects and their semantics
+- Understand custom events and their meaning
+- Document field purposes and relationships
+- *Complex workspaces may need multiple rounds*
+
+### Phase 3: Concept Mapping (2-3 rounds)
+- Define lifecycle thresholds
+- Define engagement metrics
+- Define intent signals
+- Define value tiers
+- *Each domain may warrant its own round*
+
+### Phase 4: Gap Analysis (1-2 rounds)
+- Identify blockers for each concept
+- Discuss workarounds vs. proper fixes
+- Prioritize resolutions
+- *May need follow-up for complex data source discussions*
+
+### Phase 5: Segment Catalog (1-2 rounds)
+- Finalize segment definitions
+- Agree on naming conventions
+- Confirm folder organization
+- Review predicates before creation
+
+### Phase 6: Implementation (1 round)
+- Create Bird audiences
+- Generate documentation
+- Define next steps
+
+**Typical session: 8-12 rounds total**
+
+## Round Format
+
+Each round file follows this structure:
+
+```markdown
+# Round N: [Topic]
+
+## Previous Round Summary
+Key decisions and insights from previous round.
+
+## This Round Focus
+- Topic area one
+- Topic area two
+
+## Questions
+
+### QN.1: [Question Title]
+
+**Context**: Why this matters...
+
+**Options**:
+- A) Option with tradeoffs
+- B) Option with tradeoffs
+
+**Your input**: [What you need from user]
+
+---
+
+### QN.2: [Next Question]
+...
+
+## Emerging Artifacts
+
+Preview of what's being built based on answers so far.
+
+## Next Round Preview
+What we'll cover next.
 ```
 
-**Workflow Phases**:
-1. Pre-Discovery (silent, uses `workspace-discovery`)
-2. Business Context Validation (conversational)
-3. Concept Mapping (match data to SaaS domains)
-4. Gap Analysis (identify missing concepts)
-5. Segment Generation (create building blocks)
-6. Documentation (produce reports)
+## Living Document
 
-### Skill 3: `saas-segment-catalog` (NEW - Reference)
+Maintain `artifacts/semantic-spec.yaml` throughout:
 
 ```yaml
----
-name: saas-segment-catalog
-description: |
-  Reference catalog of standard SaaS segments. Defines lifecycle, engagement, 
-  intent, and value segments with predicate templates. Use when building 
-  audiences for SaaS campaigns or needing segment definitions.
----
+# Updated after each round
+business_context:
+  model: [from Round 1]
+  customer_definition: [from Round 1]
+  
+semantic_mappings:
+  lifecycle:
+    active_customers:
+      status: [defined|pending|blocked]
+      definition: [from Round 3]
+      
+segments_to_create:
+  - name: [from Round 5]
+    predicate: [from Round 5]
 ```
 
-**Purpose**: Pure reference skill — no workflow, just definitions that other skills use.
+## Quality Standards
 
-### Skill 4: `saas-gap-analyzer` (NEW - Focused)
+### Good Questions
+- Include **context** (why it matters)
+- Offer **options** with tradeoffs
+- Show **concrete examples**
+- **Build on** previous answers
+- **Challenge** when appropriate
 
-```yaml
----
-name: saas-gap-analyzer
-description: |
-  Analyze data gaps blocking SaaS capabilities. Given a use case like 
-  "target churned enterprise customers", identifies exactly what data 
-  is missing and how to fill it. Use when a segment can't be built 
-  due to missing data.
----
+### Good Rounds
+- 6-10 focused questions
+- Clear connection to previous round
+- Preview of emerging artifacts
+- Summary with next steps
+
+## Output Artifacts
+
+By session end, produce:
+
+1. `rounds/01-foundation.md` through `rounds/06-implementation.md`
+2. `artifacts/semantic-spec.yaml` — Complete specification
+3. `artifacts/gap-analysis.md` — Blockers and resolutions
+4. `artifacts/segment-catalog.md` — All segments with predicates
+5. `session-summary.md` — Journey, decisions, next steps
+
+Plus: **Actual Bird audiences** created in workspace.
+```
+
+### Why Single Agent?
+
+| Multi-Agent Approach | Single Agent with Kinen |
+|---------------------|-------------------------|
+| Complex orchestration | Simple session flow |
+| Handoff confusion | Consistent voice |
+| Duplicate context | Progressive context |
+| "Which agent do I talk to?" | One clear guide |
+
+### Agent Placement
+
+```
+plugins/datahub/
+├── agents/
+│   └── saas-semantic-architect.md    ← NEW
+├── skills/
+│   └── workspace-discovery/          ← Used by agent
+├── concepts/
+│   └── saas-domains.md               ← Reference material
+└── templates/
+    └── session/                      ← Round templates
+        ├── round-01-foundation.md
+        ├── round-02-data-landscape.md
+        └── ...
 ```
 
 ---
@@ -142,38 +286,16 @@ description: |
 ```
 plugins/datahub/
 ├── .claude-plugin/
-│   └── plugin.json                          # Updated with new skills
+│   └── plugin.json                          # Updated with agent
+│
+├── agents/
+│   └── saas-semantic-architect.md           # NEW - Main agent
 │
 ├── skills/
-│   ├── workspace-discovery/
-│   │   ├── SKILL.md                         # Enhanced
-│   │   └── references/
-│   │       └── statistics-queries.md        # Existing
-│   │
-│   ├── saas-semantic-builder/               # NEW
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       ├── phase-0-prediscovery.md
-│   │       ├── phase-1-business-context.md
-│   │       ├── phase-2-concept-mapping.md
-│   │       ├── phase-3-gap-analysis.md
-│   │       └── phase-4-segment-generation.md
-│   │
-│   ├── saas-segment-catalog/                # NEW
-│   │   ├── SKILL.md
-│   │   └── domains/
-│   │       ├── lifecycle.md
-│   │       ├── engagement.md
-│   │       ├── intent.md
-│   │       ├── value.md
-│   │       ├── reachability.md
-│   │       └── behavioral.md
-│   │
-│   └── saas-gap-analyzer/                   # NEW
-│       ├── SKILL.md
+│   └── workspace-discovery/
+│       ├── SKILL.md                         # Enhanced for pre-discovery
 │       └── references/
-│           ├── common-gaps.md
-│           └── resolution-playbooks.md
+│           └── statistics-queries.md        # Existing
 │
 ├── concepts/
 │   ├── catalog-taxonomy.md                  # Existing
@@ -181,19 +303,41 @@ plugins/datahub/
 │   ├── model-kinds.md                       # Existing
 │   └── saas-semantic-layer.md               # NEW - Architecture overview
 │
-├── patterns/                                # NEW
+├── domains/                                 # NEW - SaaS concept definitions
+│   ├── lifecycle.md                         # Customer lifecycle concepts
+│   ├── engagement.md                        # Usage/activity concepts
+│   ├── intent.md                            # Behavioral signals
+│   ├── value.md                             # Revenue/tier concepts
+│   ├── reachability.md                      # Channel coverage
+│   └── behavioral.md                        # Web/app patterns
+│
+├── patterns/                                # NEW - Inference patterns
 │   ├── page-url-patterns.yaml               # Web behavior patterns
 │   ├── custom-object-patterns.yaml          # Object semantic inference
 │   └── custom-event-patterns.yaml           # Event semantic inference
 │
+├── templates/                               # NEW - Session templates
+│   └── session/
+│       ├── init.md                          # Session initialization
+│       ├── phases/
+│       │   ├── 01-foundation.md             # Business context questions
+│       │   ├── 02-data-landscape.md         # Data exploration questions  
+│       │   ├── 03-concept-mapping.md        # Threshold definitions
+│       │   ├── 04-gap-analysis.md           # Blockers & resolutions
+│       │   ├── 05-segment-catalog.md        # Segment finalization
+│       │   └── 06-implementation.md         # Create & document
+│       └── session-summary.md               # Final summary template
+│
+│   # Note: Phases are templates. Actual rounds are numbered sequentially:
+│   # rounds/01-foundation.md
+│   # rounds/02-foundation-followup.md (if needed)
+│   # rounds/03-data-landscape.md
+│   # rounds/04-custom-objects-deep-dive.md (if complex)
+│   # ... etc.
+│
 ├── task-guides/
 │   ├── full-workspace-audit.md              # Existing
-│   └── saas-onboarding-guide.md             # NEW
-│
-├── templates/                               # NEW - Output templates
-│   ├── discovery-report.md
-│   ├── gap-analysis-report.md
-│   └── segment-catalog-output.md
+│   └── saas-session-guide.md                # NEW - How to run session
 │
 ├── package.json
 └── README.md                                # Updated
@@ -581,6 +725,396 @@ Customer lifecycle segments for SaaS businesses.
 ```
 
 ---
+
+---
+
+## Kinen-Style Session Structure
+
+### Why Kinen Methodology?
+
+Instead of a monolithic automated workflow, the SaaS semantic layer session becomes a **collaborative design process** using kinen's round-based approach:
+
+| Automated Workflow | Kinen-Style Session |
+|--------------------|---------------------|
+| Agent does discovery → dumps report | Agent does discovery → presents findings as questions |
+| Agent decides what's important | User validates/corrects business context |
+| Agent creates segments automatically | User participates in defining thresholds |
+| One-way output | Iterative refinement |
+| Generic segments | Tailored to THIS business |
+
+### Session Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    SAAS SEMANTIC LAYER SESSION                              │
+│                    (Kinen-Style Methodology)                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  PRE-SESSION: Automated Discovery (Silent)                                  │
+│  ─────────────────────────────────────────                                  │
+│  Agent scans workspace, prepares findings for Phase 1                       │
+│                                                                             │
+│                              ↓                                              │
+│                                                                             │
+│  PHASE 1: Foundation (1-2 rounds)                                           │
+│  ─────────────────────────────────                                          │
+│  "Here's what I found. Let me confirm your business model..."               │
+│  Topics: Business model, customer definition, key use cases                 │
+│  Artifact: Business context document                                        │
+│                                                                             │
+│  Example rounds:                                                            │
+│    Round 1: Business model validation                                       │
+│    Round 2: Use case prioritization (if complex)                           │
+│                                                                             │
+│                              ↓                                              │
+│                                                                             │
+│  PHASE 2: Data Landscape (1-3 rounds)                                       │
+│  ──────────────────────────────────                                         │
+│  "Let's explore your data and what it means..."                            │
+│  Topics: Custom objects semantics, event meanings, field purposes           │
+│  Artifact: Data inventory with annotations                                  │
+│                                                                             │
+│  Example rounds:                                                            │
+│    Round 3: Custom objects overview                                         │
+│    Round 4: Event semantics deep dive (if many events)                     │
+│    Round 5: Associations and relationships                                  │
+│                                                                             │
+│                              ↓                                              │
+│                                                                             │
+│  PHASE 3: Concept Mapping (2-3 rounds)                                      │
+│  ───────────────────────────────────                                        │
+│  "How should we define these SaaS concepts for YOUR business?"             │
+│  Topics: Thresholds, definitions, edge cases per domain                     │
+│  Artifact: Semantic mapping document                                        │
+│                                                                             │
+│  Example rounds:                                                            │
+│    Round 6: Lifecycle concepts (customer status, churn)                    │
+│    Round 7: Engagement concepts (active, power user, dormant)              │
+│    Round 8: Intent & value concepts                                        │
+│                                                                             │
+│                              ↓                                              │
+│                                                                             │
+│  PHASE 4: Gap Analysis (1-2 rounds)                                         │
+│  ────────────────────────────────                                           │
+│  "Here's what's blocking some capabilities..."                             │
+│  Topics: Priority of gaps, workarounds, data sources                        │
+│  Artifact: Gap analysis with resolution plan                                │
+│                                                                             │
+│  Example rounds:                                                            │
+│    Round 9: Gap inventory and prioritization                               │
+│    Round 10: Resolution strategies (if many gaps)                          │
+│                                                                             │
+│                              ↓                                              │
+│                                                                             │
+│  PHASE 5: Segment Catalog (1-2 rounds)                                      │
+│  ───────────────────────────────────                                        │
+│  "Let's finalize your building blocks..."                                  │
+│  Topics: Segment priorities, naming, predicates review                      │
+│  Artifact: Segment definitions (ready to create)                            │
+│                                                                             │
+│  Example rounds:                                                            │
+│    Round 11: Segment definitions and naming                                │
+│    Round 12: Predicate review before creation                              │
+│                                                                             │
+│                              ↓                                              │
+│                                                                             │
+│  PHASE 6: Implementation (1 round)                                          │
+│  ──────────────────────────────                                             │
+│  "Creating segments and documenting next steps..."                         │
+│  Actions: Create Bird audiences, generate docs                              │
+│  Artifact: Session summary + next steps                                     │
+│                                                                             │
+│  Example round:                                                             │
+│    Round 13: Create audiences, document, wrap up                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Typical session: 8-13 rounds depending on workspace complexity
+```
+
+### Round Examples
+
+#### Round 1: Foundation (Business Context)
+
+```markdown
+# Round 1: Foundation
+
+## Pre-Discovery Summary
+
+I've scanned your Bird workspace. Here's what I found:
+
+📊 **Data Volume**
+- 1.27M contacts, 258K companies
+- 85% contact-company linkage
+
+🔧 **Custom Objects** (3 found)
+- `subscription` (4,521 records) - Looks like subscription tracking
+- `ticket` (12,843 records) - Support tickets?
+- `opportunity` (2,100 records) - Sales pipeline
+
+📡 **Custom Events** (2 found)
+- `user-login` (45K/month) - Product logins
+- `feature-click` (128K/month) - Feature usage
+
+## Questions
+
+### Q1.1: Business Model Validation
+
+Based on your data structure, this looks like a **B2B SaaS** business:
+- Account-based (companies linked to contacts)
+- Subscription model (subscription object exists)
+- Product-led signals (login + feature events)
+
+**Is this accurate?**
+
+- A) Yes, B2B SaaS with sales-led motion
+- B) Yes, B2B SaaS with product-led growth (PLG)
+- C) Hybrid (sales-led for enterprise, PLG for SMB)
+- D) Different model (please describe)
+
+---
+
+### Q1.2: Customer Definition
+
+For lifecycle segmentation, I need to understand who is a "customer":
+
+**Option A**: Company with `subscription.status = active`
+**Option B**: Company with a specific field (which one?)
+**Option C**: Contact-level (individual subscriptions, not company)
+
+**Which defines "customer" for you?**
+
+---
+
+### Q1.3: Enterprise Definition
+
+For value segmentation, what makes an account "enterprise"?
+
+- A) ACV above threshold (what threshold? $______)
+- B) Plan tier (which tier name? _______)
+- C) Employee count (above ______)
+- D) Manual flag (field name? _______)
+- E) We don't segment by value tier
+
+---
+
+### Q1.4: Primary Use Cases
+
+Which use cases are most important to you? (Rank 1-3)
+
+- [ ] Churn prevention (identify and save at-risk customers)
+- [ ] Win-back campaigns (re-engage churned customers)
+- [ ] Trial conversion (convert trials to paid)
+- [ ] Expansion/upsell (grow existing accounts)
+- [ ] Engagement nurturing (activate dormant users)
+- [ ] Lead scoring (prioritize prospects)
+
+---
+
+### Q1.5: Custom Object Semantics
+
+I found `ticket` with 12,843 records but no description. What is this?
+
+- A) Support tickets (customer issues)
+- B) Sales tickets (deals/opportunities)
+- C) Internal tasks
+- D) Something else: ___________
+
+**Why this matters**: Support ticket patterns can indicate churn risk.
+
+---
+
+## Round 1 Summary
+
+After your responses, I'll create:
+- ✅ Business context document
+- ✅ Updated data inventory with your annotations
+- 📋 Prepare Round 2: Data Landscape deep dive
+```
+
+#### Round 3: Concept Mapping (Example)
+
+```markdown
+# Round 3: Concept Mapping
+
+## Previous Rounds Summary
+
+From Round 1-2, I understand:
+- B2B SaaS, hybrid sales motion
+- Customer = company with active subscription
+- Enterprise = ACV > $50K
+- Priority: Churn prevention, then win-back
+
+## This Round Focus
+
+Define YOUR thresholds for engagement and intent concepts.
+
+## Questions
+
+### Q3.1: Active User Definition
+
+You have `user-login` events. What time window defines "active"?
+
+| Definition | Your Choice |
+|------------|-------------|
+| DAU (Daily Active) | Login in last 1 day |
+| WAU (Weekly Active) | Login in last 7 days |
+| MAU (Monthly Active) | Login in last 30 days |
+
+**For YOUR business, which is most meaningful for:**
+- Engagement monitoring: ______
+- Churn risk detection: ______
+- Health scoring: ______
+
+---
+
+### Q3.2: Power User Threshold
+
+What makes someone a "power user"?
+
+**Option A**: Frequency-based
+- 5+ logins in 30 days = power user
+- 10+ logins in 30 days = power user  
+- 20+ logins in 30 days = power user
+
+**Option B**: Feature-based
+- Used X specific features
+- Used N different features
+
+**Option C**: Combined
+- 10+ logins AND used reporting feature
+
+**What threshold fits your product?**
+
+---
+
+### Q3.3: Churn Intent Signals
+
+I detected pages matching churn intent patterns:
+
+| Page Path | Monthly Views | Include? |
+|-----------|---------------|----------|
+| /account/cancel | 234 | ✅ Obvious |
+| /account/downgrade | 156 | ✅ Obvious |
+| /help/cancel-subscription | 89 | ❓ |
+| /pricing (by customers) | 1,200 | ❓ Maybe re-evaluation? |
+
+**Which should trigger "Showed Churn Intent"?**
+
+---
+
+### Q3.4: Dormant vs Churned
+
+Important distinction for messaging:
+
+- **Dormant**: Still a customer, but not using product
+- **Churned**: No longer a customer
+
+**For dormant (still paying but inactive):**
+- After ____ days without login = dormant
+- Or: Less than ____ logins in 30 days = declining engagement
+
+---
+
+## Emerging Semantic Map
+
+Based on your answers, here's your semantic layer taking shape:
+
+```yaml
+lifecycle:
+  active_customer: subscription.status = active
+  churned_customer: subscription.status = cancelled
+  enterprise: company.acv > 50000
+
+engagement:
+  active_user: login event in last [?] days
+  power_user: [?]+ logins in 30 days
+  dormant: customer AND no login in [?] days
+
+intent:
+  churn_intent: visited [which pages?]
+  purchase_intent: visited /pricing, /upgrade (non-customers)
+```
+
+**Does this mapping feel right for your business?**
+```
+
+### Living Document
+
+Throughout the session, we maintain a **semantic-spec.yaml** that evolves:
+
+```yaml
+# SaaS Semantic Layer Specification
+# Session: 2025-12-11
+# Status: In Progress (Round 3/6)
+
+business_context:
+  model: B2B SaaS
+  sales_motion: Hybrid (sales-led enterprise, PLG SMB)
+  customer_definition: Company with subscription.status = active
+  enterprise_threshold: ACV > $50,000
+  # Confirmed in Round 1
+
+data_inventory:
+  custom_objects:
+    subscription:
+      purpose: Tracks customer subscriptions
+      saas_relevance: critical
+      # Confirmed in Round 2
+    ticket:
+      purpose: Support tickets (customer issues)
+      saas_relevance: medium (churn signal)
+      # Confirmed in Round 1
+  custom_events:
+    user-login:
+      purpose: Product login tracking
+      saas_relevance: critical
+    feature-click:
+      purpose: Feature usage tracking
+      saas_relevance: critical
+
+semantic_mappings:
+  lifecycle:
+    active_customers:
+      status: defined
+      source: subscription.status = active
+    churned_customers:
+      status: defined
+      source: subscription.status = cancelled
+      gap: missing churnedAt timestamp
+    trial_users:
+      status: blocked
+      missing: trialEndsAt field
+      
+  engagement:
+    active_users_7d:
+      status: pending_threshold  # Awaiting Round 3 answer
+    power_users:
+      status: pending_threshold
+    dormant:
+      status: pending_threshold
+
+  # ... continues with each concept
+
+gaps:
+  - field: company.churnedAt
+    blocks: [recently_churned, time_based_winback]
+    priority: high
+  - field: company.acv
+    blocks: [enterprise_customers, value_segmentation]
+    priority: critical
+    
+segments_to_create: []  # Populated in Round 5-6
+```
+
+### Benefits of Kinen-Style
+
+1. **User owns the definitions** — Thresholds are THEIR decisions, not generic defaults
+2. **Progressive understanding** — Each round builds on previous
+3. **Artifact trail** — Clear documentation of WHY each definition exists
+4. **Collaborative** — Agent proposes, user validates/corrects
+5. **Better segments** — Tailored to actual business, not generic SaaS
+6. **Reusable methodology** — Works across different SaaS businesses
 
 ---
 

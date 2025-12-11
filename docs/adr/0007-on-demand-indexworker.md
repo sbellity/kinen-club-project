@@ -54,3 +54,4 @@ func (s *KinenServer) IndexBuild(ctx context.Context, req *connect.Request[kinen
 - [ADR-006: Adapter Pattern](0006-adapter-pattern.md)
 
 
+

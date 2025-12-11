@@ -18,3 +18,4 @@ package: build-all
 	cd dist && tar -czf kinen-daemon-linux-amd64.tar.gz kinen-daemon-linux-amd64
 	cd dist && shasum -a 256 *.tar.gz > checksums.txt
 
+
