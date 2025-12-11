@@ -173,10 +173,9 @@ async function runPreDiscovery(): Promise<PreDiscoveryReport> {
       has_company is count() { where: companyRefs != null }`
   });
   
-  // 4. Check for SaaS-relevant fields
+  // 4. Check for SaaS-relevant fields on standard objects
   const contactSchema = await getModel("crm.contact");
   const companySchema = await getModel("crm.company");
-  
   const saasFields = detectSaaSFields(contactSchema, companySchema);
   
   // 5. Check activity patterns
@@ -185,10 +184,14 @@ async function runPreDiscovery(): Promise<PreDiscoveryReport> {
     query: `group_by: targetType; aggregate: total is count()`
   });
   
-  // 6. Check for custom objects (subscription, etc.)
-  const customObjects = models.filter(m => m.name.startsWith("custom-object."));
+  // 6. DISCOVER CUSTOM OBJECTS AND EVENTS
+  const customObjects = await discoverCustomObjects(models);
+  const customEvents = await discoverCustomEvents(models);
   
-  // 7. Generate hypothesis
+  // 7. Analyze and document custom schema semantics
+  const customAnalysis = await analyzeCustomSchemas(customObjects, customEvents);
+  
+  // 8. Generate hypothesis
   return {
     detectedModel: inferBusinessModel({
       contactCount,
@@ -196,14 +199,473 @@ async function runPreDiscovery(): Promise<PreDiscoveryReport> {
       companyLinkage,
       saasFields,
       activityStats,
-      customObjects
+      customObjects,
+      customEvents,
+      customAnalysis
     }),
     confidence: calculateConfidence(...),
     existingCapabilities: saasFields,
+    customObjectsFound: customAnalysis.objects,
+    customEventsFound: customAnalysis.events,
     maturityLevel: assessMaturity(...),
     recommendations: generateInitialRecs(...)
   };
 }
+```
+
+### Custom Object & Event Discovery
+
+Custom objects and events often contain the most valuable SaaS-specific data (subscriptions, invoices, product usage events). Phase 0 must discover and analyze them.
+
+#### Discovery Logic
+
+```typescript
+async function discoverCustomObjects(models: Model[]): Promise<CustomObjectAnalysis[]> {
+  // Find all custom objects
+  const customObjects = models.filter(m => 
+    m.name.startsWith("custom-object.") || 
+    m.catalogId === "ws:default" && m.kind === "object"
+  );
+  
+  const analyses = [];
+  
+  for (const obj of customObjects) {
+    // Get full schema
+    const schema = await getModel({ modelId: obj.id });
+    
+    // Get volume and recency
+    const stats = await runQuery({
+      modelName: obj.name,
+      query: `aggregate: 
+        total is count(),
+        last_30d is count() { where: createdAt > now - 30 day },
+        earliest is min(createdAt),
+        latest is max(createdAt)`
+    });
+    
+    // Infer semantics from schema
+    const semantics = inferObjectSemantics(obj.name, schema);
+    
+    analyses.push({
+      name: obj.name,
+      displayName: obj.displayName,
+      description: obj.description, // May be empty
+      kind: obj.kind,
+      fields: schema.fields,
+      associations: schema.associations,
+      stats,
+      inferredSemantics: semantics,
+      hasDocumentation: !!obj.description && obj.description.length > 10
+    });
+  }
+  
+  return analyses;
+}
+
+async function discoverCustomEvents(models: Model[]): Promise<CustomEventAnalysis[]> {
+  // Find all custom events
+  const customEvents = models.filter(m => 
+    m.name.startsWith("custom-event.") ||
+    m.name.startsWith("semantic-event.") ||
+    (m.catalogId === "ws:default" && m.kind === "event")
+  );
+  
+  const analyses = [];
+  
+  for (const evt of customEvents) {
+    const schema = await getModel({ modelId: evt.id });
+    
+    // Get volume by time window
+    const stats = await runQuery({
+      modelName: evt.name,
+      query: `aggregate:
+        total is count(),
+        last_7d is count() { where: timestamp > now - 7 day },
+        last_30d is count() { where: timestamp > now - 30 day },
+        last_90d is count() { where: timestamp > now - 90 day }`
+    });
+    
+    // Check for contact association
+    const hasContactLink = schema.fields.some(f => 
+      f.path.includes("contactId") || f.path.includes("contact_id")
+    );
+    
+    // Infer event semantics
+    const semantics = inferEventSemantics(evt.name, schema);
+    
+    analyses.push({
+      name: evt.name,
+      displayName: evt.displayName,
+      description: evt.description,
+      fields: schema.fields,
+      stats,
+      hasContactLink,
+      inferredSemantics: semantics,
+      hasDocumentation: !!evt.description && evt.description.length > 10
+    });
+  }
+  
+  return analyses;
+}
+```
+
+#### Semantic Inference Patterns
+
+```typescript
+const CUSTOM_OBJECT_PATTERNS = {
+  subscription: {
+    namePatterns: ["subscription", "plan", "license", "contract"],
+    fieldPatterns: ["status", "plan", "price", "startDate", "endDate", "renewalDate"],
+    saasRelevance: "critical",
+    purpose: "Tracks customer subscriptions and recurring revenue"
+  },
+  
+  invoice: {
+    namePatterns: ["invoice", "billing", "payment"],
+    fieldPatterns: ["amount", "status", "dueDate", "paidAt", "invoiceNumber"],
+    saasRelevance: "high",
+    purpose: "Tracks invoices and payment history"
+  },
+  
+  order: {
+    namePatterns: ["order", "purchase", "transaction"],
+    fieldPatterns: ["total", "status", "items", "orderedAt"],
+    saasRelevance: "medium",
+    purpose: "Tracks purchases (e-commerce or add-ons)"
+  },
+  
+  ticket: {
+    namePatterns: ["ticket", "support", "case", "issue"],
+    fieldPatterns: ["status", "priority", "assignee", "resolvedAt"],
+    saasRelevance: "medium",
+    purpose: "Tracks support interactions (churn signal)"
+  },
+  
+  deal: {
+    namePatterns: ["deal", "opportunity", "proposal"],
+    fieldPatterns: ["stage", "amount", "closeDate", "probability"],
+    saasRelevance: "high",
+    purpose: "Tracks sales pipeline"
+  },
+  
+  account: {
+    namePatterns: ["account", "organization", "tenant"],
+    fieldPatterns: ["name", "plan", "status", "ownerId"],
+    saasRelevance: "critical",
+    purpose: "Core customer account (may supplement crm.company)"
+  }
+};
+
+const CUSTOM_EVENT_PATTERNS = {
+  login: {
+    namePatterns: ["login", "sign-in", "auth", "session-start"],
+    fieldPatterns: ["userId", "timestamp", "device", "ip"],
+    saasRelevance: "critical",
+    purpose: "Tracks product engagement (active users)"
+  },
+  
+  feature_usage: {
+    namePatterns: ["feature", "action", "clicked", "used", "viewed"],
+    fieldPatterns: ["featureName", "action", "timestamp"],
+    saasRelevance: "critical",
+    purpose: "Tracks product adoption (expansion/churn signals)"
+  },
+  
+  page_view: {
+    namePatterns: ["page", "view", "screen", "navigation"],
+    fieldPatterns: ["pageName", "url", "referrer"],
+    saasRelevance: "medium",
+    purpose: "Tracks in-app navigation"
+  },
+  
+  api_call: {
+    namePatterns: ["api", "request", "call"],
+    fieldPatterns: ["endpoint", "method", "statusCode"],
+    saasRelevance: "high",
+    purpose: "Tracks API usage (for usage-based pricing)"
+  },
+  
+  subscription_event: {
+    namePatterns: ["subscribed", "upgraded", "downgraded", "cancelled", "renewed"],
+    fieldPatterns: ["plan", "amount", "reason"],
+    saasRelevance: "critical",
+    purpose: "Tracks subscription lifecycle changes"
+  },
+  
+  payment_event: {
+    namePatterns: ["payment", "charge", "refund", "failed"],
+    fieldPatterns: ["amount", "status", "method"],
+    saasRelevance: "high",
+    purpose: "Tracks payment success/failure"
+  }
+};
+
+function inferObjectSemantics(name: string, schema: Schema): InferredSemantics {
+  const nameLower = name.toLowerCase();
+  
+  for (const [type, pattern] of Object.entries(CUSTOM_OBJECT_PATTERNS)) {
+    // Check name match
+    const nameMatch = pattern.namePatterns.some(p => nameLower.includes(p));
+    
+    // Check field match
+    const fieldNames = schema.fields.map(f => f.path.toLowerCase());
+    const fieldMatches = pattern.fieldPatterns.filter(p => 
+      fieldNames.some(f => f.includes(p.toLowerCase()))
+    );
+    
+    if (nameMatch || fieldMatches.length >= 2) {
+      return {
+        inferredType: type,
+        confidence: nameMatch && fieldMatches.length >= 2 ? "high" : "medium",
+        saasRelevance: pattern.saasRelevance,
+        purpose: pattern.purpose,
+        matchedPatterns: {
+          name: nameMatch,
+          fields: fieldMatches
+        }
+      };
+    }
+  }
+  
+  return {
+    inferredType: "unknown",
+    confidence: "low",
+    saasRelevance: "unknown",
+    purpose: "Custom object - needs manual documentation"
+  };
+}
+
+function inferEventSemantics(name: string, schema: Schema): InferredSemantics {
+  // Similar logic for events
+  const nameLower = name.toLowerCase();
+  
+  for (const [type, pattern] of Object.entries(CUSTOM_EVENT_PATTERNS)) {
+    const nameMatch = pattern.namePatterns.some(p => nameLower.includes(p));
+    const fieldNames = schema.fields.map(f => f.path.toLowerCase());
+    const fieldMatches = pattern.fieldPatterns.filter(p => 
+      fieldNames.some(f => f.includes(p.toLowerCase()))
+    );
+    
+    if (nameMatch || fieldMatches.length >= 2) {
+      return {
+        inferredType: type,
+        confidence: nameMatch && fieldMatches.length >= 2 ? "high" : "medium",
+        saasRelevance: pattern.saasRelevance,
+        purpose: pattern.purpose,
+        matchedPatterns: { name: nameMatch, fields: fieldMatches }
+      };
+    }
+  }
+  
+  return {
+    inferredType: "unknown",
+    confidence: "low",
+    saasRelevance: "unknown",
+    purpose: "Custom event - needs manual documentation"
+  };
+}
+```
+
+#### Custom Schema Documentation Generator
+
+When semantics aren't documented in DataHub, generate documentation suggestions:
+
+```typescript
+async function generateCustomSchemaDocumentation(
+  analysis: CustomObjectAnalysis | CustomEventAnalysis
+): Promise<DocumentationSuggestion> {
+  
+  if (analysis.hasDocumentation) {
+    return { needsDocumentation: false };
+  }
+  
+  const semantics = analysis.inferredSemantics;
+  
+  // Generate description based on inference
+  const suggestedDescription = semantics.confidence === "high"
+    ? `${semantics.purpose}. Contains ${analysis.fields.length} fields including ${
+        analysis.fields.slice(0, 3).map(f => f.displayName || f.path).join(", ")
+      }.`
+    : `Custom ${analysis.kind} with ${analysis.fields.length} fields. Purpose: [NEEDS DOCUMENTATION]`;
+  
+  // Generate field descriptions
+  const fieldDocumentation = analysis.fields
+    .filter(f => !f.description)
+    .map(f => ({
+      field: f.path,
+      suggestedDescription: inferFieldDescription(f.path, f.dataType),
+      confidence: "medium"
+    }));
+  
+  return {
+    needsDocumentation: true,
+    suggestedDescription,
+    fieldDocumentation,
+    inferredType: semantics.inferredType,
+    saasRelevance: semantics.saasRelevance,
+    recommendation: semantics.saasRelevance === "critical" 
+      ? "This object appears critical for SaaS use cases. Please verify and document."
+      : "Consider documenting this object for future reference."
+  };
+}
+
+const FIELD_DESCRIPTION_PATTERNS = {
+  status: "Current status of the record",
+  createdAt: "Timestamp when record was created",
+  updatedAt: "Timestamp when record was last updated",
+  amount: "Monetary value (currency assumed from context)",
+  plan: "Subscription plan or tier name",
+  startDate: "Start date of the subscription/contract",
+  endDate: "End date of the subscription/contract",
+  userId: "Reference to the user/contact",
+  companyId: "Reference to the company/account",
+  reason: "Reason or explanation for the action"
+};
+
+function inferFieldDescription(fieldPath: string, dataType: string): string {
+  const fieldName = fieldPath.split(".").pop()?.toLowerCase() || "";
+  
+  for (const [pattern, description] of Object.entries(FIELD_DESCRIPTION_PATTERNS)) {
+    if (fieldName.includes(pattern.toLowerCase())) {
+      return description;
+    }
+  }
+  
+  // Generic based on type
+  switch (dataType) {
+    case "timestamp": return "Date/time value";
+    case "boolean": return "True/false flag";
+    case "number": return "Numeric value";
+    case "string": return "Text value";
+    default: return "[Needs description]";
+  }
+}
+```
+
+#### Custom Objects Report Section
+
+Add to pre-discovery report:
+
+```yaml
+custom_objects:
+  found: 3
+  documented: 1
+  undocumented: 2
+  
+  objects:
+    - name: "custom-object.subscription"
+      displayName: "Subscription"
+      description: "Customer subscription records"  # Has docs
+      records: 4521
+      last_30d: 342
+      associations:
+        - to: crm.company
+          via: companyId
+      inferredType: "subscription"
+      confidence: "high"
+      saasRelevance: "critical"
+      keyFields:
+        - path: status
+          values: ["active", "cancelled", "paused"]
+        - path: plan
+          values: ["starter", "pro", "enterprise"]
+        - path: mrr
+          type: number
+          coverage: 98%
+      documentation_status: "documented"
+      
+    - name: "custom-object.ticket"
+      displayName: null  # No display name
+      description: null  # No description
+      records: 12843
+      last_30d: 1205
+      inferredType: "ticket"
+      confidence: "medium"
+      saasRelevance: "medium"
+      keyFields:
+        - path: status
+        - path: priority
+        - path: assignee
+      documentation_status: "needs_documentation"
+      suggested_description: "Support ticket records. Contains status, priority, and assignee tracking."
+      
+custom_events:
+  found: 5
+  documented: 2
+  undocumented: 3
+  
+  events:
+    - name: "custom-event.user-login"
+      records_30d: 45230
+      records_7d: 12500
+      hasContactLink: true
+      inferredType: "login"
+      confidence: "high"
+      saasRelevance: "critical"
+      documentation_status: "needs_documentation"
+      suggested_description: "User login events for tracking product engagement."
+      recommendation: "CRITICAL: This event enables active user tracking. Document immediately."
+      
+    - name: "custom-event.feature-click"
+      records_30d: 128400
+      records_7d: 31200
+      hasContactLink: true
+      inferredType: "feature_usage"
+      confidence: "high"
+      saasRelevance: "critical"
+      documentation_status: "needs_documentation"
+      suggested_description: "Feature usage tracking for product adoption analysis."
+```
+
+#### Updated Opening Message with Custom Objects
+
+```markdown
+**Agent**:
+
+I've scanned your Bird workspace. Here's what I found:
+
+📊 **Your Data**
+- 1.27M contacts, 258K companies
+- Strong contact-company linkage (85%)
+
+🔧 **Custom Objects Found**
+| Object | Records | SaaS Relevance | Documented |
+|--------|---------|----------------|------------|
+| `subscription` | 4,521 | ✅ Critical | ✅ Yes |
+| `ticket` | 12,843 | ⚠️ Medium | ❌ No |
+
+This is great! You have a **subscription object** which means you're tracking 
+customer subscriptions. I can use this for lifecycle analysis.
+
+📡 **Custom Events Found**
+| Event | Last 30d | SaaS Relevance | Documented |
+|-------|----------|----------------|------------|
+| `user-login` | 45,230 | ✅ Critical | ❌ No |
+| `feature-click` | 128,400 | ✅ Critical | ❌ No |
+
+Excellent! You're tracking **product usage events**. This enables:
+- Active user identification
+- Engagement scoring
+- Churn risk detection
+
+⚠️ **Undocumented Objects** (2 objects, 2 events)
+I've inferred their purpose but recommend adding descriptions in DataHub 
+for future clarity.
+
+**With your current setup, you CAN potentially:**
+- ✅ Identify active vs inactive users (via login events)
+- ✅ Track subscription status (via subscription object)
+- ✅ Detect declining engagement (via feature usage trends)
+
+**Still missing for full capabilities:**
+- ❌ `customerStatus` on company (subscription object has it, but not synced)
+- ❌ `acv` / contract value
+- ❌ `churnedAt` timestamp
+
+Would you like me to:
+1. Generate documentation for your undocumented objects/events?
+2. Show how to use your subscription object for customer lifecycle?
+3. Proceed with gap analysis for your priority use case?
 ```
 
 ### SaaS Field Detection
