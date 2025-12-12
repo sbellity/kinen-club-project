@@ -361,6 +361,12 @@ Each agent needs:
 3. How would you implement quality gates? (LLM-as-judge, rules, human review?)
 4. Is partial campaign output useful, or is it all-or-nothing?
 
+
+>> 1. it's a balance. ultimately user needs to also be able to intervene and express his preferences or course correct.
+>> 2. yes
+>> 3. all are possible and probably necessary
+>> 4. it's useful for the user to have somethig to course correct on, but ultimately the output needs to be complete
+
 ---
 
 ### Q1.6: Observability & Debugging
@@ -410,6 +416,10 @@ Option C: Linked Traces
 3. How do you currently identify where a session went wrong?
 4. Should agent transitions be visible to users, or implementation detail?
 
+>> 1. Mainly long unexplaninable traces and behaviours
+>> 2. No
+>> 3. We have the logs and a few skills to analyze mcp.log and session.log but that's not great.
+
 ---
 
 ### Q1.7: Cost & Latency Implications
@@ -442,6 +452,12 @@ Option C: Linked Traces
 2. Is latency or cost more important for your use case?
 3. Would users pay premium for multi-agent campaigns?
 4. Can we cache/reuse discovery across sessions to reduce overhead?
+
+>> 1. cost is not really the main concern, except that the more tokens are used the onger it takes obviously.
+>> 2. First correctness then Latency 100%
+>> 3. yes
+>> 4. Yes that is the plan but beyond today's discussion
+
 
 ---
 
