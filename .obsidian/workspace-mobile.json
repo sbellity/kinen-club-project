@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "sessions/20251208-01-memory-architecture-evolution/artifacts/preparation.md",
+                "file": "sessions/20251214-02-kinen-beads-architecture-comparison/artifacts/architecture-comparison.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "preparation"
+              "title": "architecture-comparison"
             }
           }
         ],
@@ -127,7 +127,7 @@
         "state": {
           "type": "backlink",
           "state": {
-            "file": "sessions/20251208-01-memory-architecture-evolution/artifacts/preparation.md",
+            "file": "sessions/20251214-02-kinen-beads-architecture-comparison/rounds/02-deep-dive.md",
             "collapseAll": false,
             "extraContext": false,
             "sortOrder": "alphabetical",
@@ -183,6 +183,41 @@
   },
   "active": "01fe7e925a46827f",
   "lastOpenFiles": [
-    "Untitled.md"
+    "sessions/20251214-02-kinen-beads-architecture-comparison/rounds/03-cross-editor.md",
+    "sessions/20251214-02-kinen-beads-architecture-comparison/rounds/02-deep-dive.md",
+    "sessions/20251206-01-kinen-beads-devx/session-summary.md",
+    "sessions/20251206-01-kinen-beads-devx/init.md",
+    "sessions/20251206-02-kinen-implementation-coordination/rounds/03-commit-review.md",
+    "sessions/20251206-02-kinen-implementation-coordination/rounds/02-progress-review.md",
+    "sessions/20251206-02-kinen-implementation-coordination/rounds/01-initial-dispatch.md",
+    "sessions/20251207-01-kinen-plugin-system-design/init.md",
+    "sessions/20251207-02-multi-agent-coordination/init.md",
+    "sessions/20251208-01-memory-architecture-evolution/init.md",
+    "sessions/20251208-01-project-context-implementation-phase-1/README.md",
+    "sessions/20251210-01-bird-mcp-simplification/02-simplification-plan.md",
+    "sessions/20251210-01-bird-mcp-simplification/01-current-state.md",
+    "sessions/20251212-01-llmchain-agents-crew-architecture/rounds/01-foundation.md",
+    "sessions/20251212-01-llmchain-agents-crew-architecture/rounds/02-interaction-fundamentals.md",
+    "sessions/20251211-01-saas-workspace-skills/artifacts/use-cases/churned-high-value-winback.md",
+    "sessions/20251211-01-saas-workspace-skills/artifacts/discovery/workspace-statistics.md",
+    "sessions/20251211-01-saas-workspace-skills/artifacts/discovery/workspace-data-model.md",
+    "sessions/20251211-01-saas-workspace-skills/rounds/01-foundation.md",
+    "sessions/20251211-01-saas-workspace-skills/rounds/03-implementation-plan.md",
+    "sessions/20251211-01-saas-workspace-skills/rounds/02-saas-onboarding-skill.md",
+    "sessions/20251211-01-saas-workspace-skills/implementation/03-phases.md",
+    "sessions/20251211-01-saas-workspace-skills/implementation/01-architecture.md",
+    "sessions/20251211-01-saas-workspace-skills/implementation/README.md",
+    "sessions/20251211-01-saas-workspace-skills/implementation/04-session-structure.md",
+    "sessions/20251211-01-saas-workspace-skills/implementation/06-execution-strategy.md",
+    "sessions/20251211-01-saas-workspace-skills/artifacts/use-cases",
+    "sessions/20251211-01-saas-workspace-skills/artifacts/discovery",
+    "sessions/20251211-01-saas-workspace-skills/rounds",
+    "sessions/20251211-01-saas-workspace-skills/implementation",
+    "sessions/20251211-01-saas-workspace-skills/artifacts",
+    "sessions/20251211-01-saas-workspace-skills",
+    "sessions/20251208-01-project-context-implementation-phase-1 copy/resources/skills-libraries/notion/notion-spec-to-implementation/evaluations/basic-spec-implementation.json",
+    "sessions/20251208-01-project-context-implementation-phase-1 copy/resources/skills-libraries/notion/notion-spec-to-implementation/evaluations/spec-to-tasks.json",
+    "sessions/20251208-01-project-context-implementation-phase-1 copy/resources/skills-libraries/notion/notion-knowledge-capture/evaluations/decision-record.json",
+    "sessions/20251208-01-project-context-implementation-phase-1 copy/resources/skills-libraries/notion/notion-knowledge-capture/evaluations/conversation-to-wiki.json"
   ]
 }
