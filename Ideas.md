@@ -1,0 +1,2 @@
+- Implement tool to show sessions in progress and recommend what to work on
+- Implement methodology as claude skills plugin

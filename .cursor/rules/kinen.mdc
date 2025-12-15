@@ -1,0 +1,16 @@
+---
+description: Kinen methodology for structured thinking sessions
+globs:
+  - "**/sessions/**"
+  - "**/rounds/**"
+  - "**/artifacts/**"
+alwaysApply: false
+---
+
+# Kinen
+
+Use **kinen** MCP tools for structured thinking sessions.
+
+Triggers: "let's think through", "design session", "explore options", complex problems with tradeoffs.
+
+Tools are self-documenting via MCP.
